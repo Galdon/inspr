@@ -11,6 +11,10 @@ Inspr 是一个程序员命名解决方案，以插件的形式集成在主流�
 corp, Corp, faction, Faction ....
 ```
 
+## 插件效果
+
+![插件效果](inspr-demo.gif)
+
 # License
 
 ```
