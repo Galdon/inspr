@@ -1,0 +1,4 @@
+[
+    { "caption": "Inspr: Inspr Me (lowerCamelCase)", "command": "inspr", "args": { "camel_case_type": "lower" } },
+    { "caption": "Inspr: Inspr Me (UpperCamelCase)", "command": "inspr", "args": { "camel_case_type": "upper" } }
+]

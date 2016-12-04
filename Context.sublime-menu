@@ -1,0 +1,10 @@
+[
+    {
+        "id": "edit",
+        "caption": "Inspr Me (lowerCamelCase)", "command": "inspr", "args": { "camel_case_type": "lower" }
+    },
+    {
+        "id": "edit",
+        "caption": "Inspr Me (UpperCamelCase)", "command": "inspr", "args": { "camel_case_type": "upper" }
+    }
+]
