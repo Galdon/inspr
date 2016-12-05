@@ -2,6 +2,7 @@ import sublime
 import sublime_plugin
 import urllib
 import json
+import threading
 
 SETTING_FILE = 'Inspr.sublime-settings'
 
@@ -45,6 +46,17 @@ YOUDAO_API_ARGS = {
 # Microsoft source
 
 GLOBAL_CACHE = {}
+settings = sublime.load_settings(SETTING_FILE)
+
+def upper_camel_case(x):
+    s = ''.join(a for a in x.title() if not a.isspace())
+    return s
+
+def lower_camel_case(x):
+    s = upper_camel_case(x)
+    lst = [word[0].lower() + word[1:] for word in s.split()]
+    s = ''.join(lst)
+    return s
 
 class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
@@ -53,14 +65,11 @@ class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
         if 'text' not in replacement:
             return
 
-        settings = sublime.load_settings(SETTING_FILE)
         view = self.view
         selection = view.sel()
         translation = replacement['text']
 
         view.replace(edit, selection[0], translation)
-
-        print(settings.get(CLEAR_SELECTION))
 
         clear_selection = settings.get(CLEAR_SELECTION, DEFAULT_CLEAR_SELECTION)
         if clear_selection == False:
@@ -76,24 +85,34 @@ class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 class InsprCommand(sublime_plugin.TextCommand):
 
     def run(self, edit, **args):
+        InsprQueryThread(edit, self.view, **args).start()
 
-        settings = sublime.load_settings(SETTING_FILE)
-        view = self.view
+class InsprQueryThread(threading.Thread):
+
+    def __init__(self, edit, view, **args):
+        self.edit = edit
+        self.view = view
+        self.window = view.window()
         self.available_trans = []
+        self.args = args
+        threading.Thread.__init__(self)
+
+    def run(self):
+
         cache = GLOBAL_CACHE
 
-        sel = view.substr(view.sel()[0])
+        sel = self.view.substr(self.view.sel()[0])
         if sel == '':
             return
 
         # if cache hit
         if sel in cache:
             cache_styles = cache[sel]
-            code_style = args['camel_case_type']
+            code_style = self.args['camel_case_type']
             if code_style in cache_styles:
                 cache_trans = cache_styles[code_style]
                 self.available_trans = cache_trans
-                view.window().show_quick_panel(self.available_trans, self.on_done)
+                self.view.window().show_quick_panel(self.available_trans, self.on_done)
                 return
 
         YOUDAO_API_ARGS['q'] = sel
@@ -121,38 +140,33 @@ class InsprCommand(sublime_plugin.TextCommand):
                     for v in value:
                         candidates.append(v)
 
-        case_style = args['camel_case_type']
+        case_style = self.args['camel_case_type']
 
         for trans in candidates:
             case = ''
             if case_style == 'upper':
-                case = self.upper_camel_case(trans)
+                case = upper_camel_case(trans)
             else:
-                case = self.lower_camel_case(trans)
+                case = lower_camel_case(trans)
             self.available_trans.append(case)
 
         self.available_trans = sorted(set(self.available_trans))
 
-        if len(cache.keys()) > DEFAULT_MAX_CACHE_WORDS:
-            cache.clear()
+        def cache_words():
+            cache_words_count = settings.get(MAXIMUM_CACHE_WORDS, DEFAULT_MAX_CACHE_WORDS)
+            if len(cache.keys()) > cache_words_count:
+                cache.clear()
 
-        if sel not in cache:
-            cache[sel] = {}
-        if case_style not in cache[sel]:
-            cache[sel][case_style] = []
-        cache[sel][case_style] = self.available_trans
+            if sel not in cache:
+                cache[sel] = {}
 
-        view.window().show_quick_panel(self.available_trans, self.on_done)
+            if case_style not in cache[sel]:
+                cache[sel][case_style] = []
 
-    def upper_camel_case(self, x):
-        s = ''.join(a for a in x.title() if not a.isspace())
-        return s
+            cache[sel][case_style] = self.available_trans
 
-    def lower_camel_case(self, x):
-        s = self.upper_camel_case(x)
-        lst = [word[0].lower() + word[1:] for word in s.split()]
-        s = ''.join(lst)
-        return s
+        cache_words()
+        self.window.show_quick_panel(self.available_trans, self.on_done)
 
     def on_done(self, picked):
 
@@ -165,3 +179,4 @@ class InsprCommand(sublime_plugin.TextCommand):
             self.view.run_command("inspr_replace_selection", args)
 
         sublime.set_timeout(replace_selection, 10)
+

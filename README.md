@@ -15,6 +15,10 @@ corp, Corp, faction, Faction ....
 
 ![插件效果](inspr-demo.gif)
 
+## 开发顺序
+
+Sublime Text -> Atom -> VSCode -> JetBrain -> Eclipse -> Mac App
+
 # License
 
 ```
