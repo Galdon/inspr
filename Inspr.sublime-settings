@@ -1,0 +1,20 @@
+{
+	// Youdao, Google, Microsoft
+	"dictionary_source": ["Youdao"],
+
+	// Maximum
+	"maximum_query_characters": 32,
+
+	// CamelCase, Underline
+	"code_style": "CamelCase",
+
+	"cache_words_size": 512
+
+	"clear_selection": false,
+
+	"skip_pronoun": true,
+
+	"full_inspiration": false,
+
+	"proxy": ""
+}

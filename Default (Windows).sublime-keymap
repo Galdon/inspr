@@ -1,0 +1,4 @@
+[
+    { "keys": ["ctrl+alt+i"], "command": "inspr", "args": { "camel_case_type": "lower" } },
+    { "keys": ["ctrl+shift+alt+i"], "command": "inspr", "args": { "camel_case_type": "upper" } }
+]
