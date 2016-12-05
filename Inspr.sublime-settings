@@ -2,13 +2,10 @@
 	// Source of dictionaries
 	"dictionary_source": ["Youdao", "Baidu"],
 
-	"maximum_query_characters": 32,
-
-	"maximum_cache_words": 512,
-
+	// Clear selection and move cursor to end of words
 	"clear_selection": true,
 
-	"auto_detect_words": true,
+	"auto_detect_words": false,
 
 	"skip_words": ["A", "a", "the", "The"],
 

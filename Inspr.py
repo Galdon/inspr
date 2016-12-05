@@ -10,10 +10,17 @@ from socket import timeout
 
 SETTINGS_FILE = 'Inspr.sublime-settings'
 
+MAXIMUM_QUERY_CHARS = 32
+MAXIMUM_CACHE_WORDS = 32768
+
+# Case styles
+LOWER_CAMEL_CASE  = 'lower_camel_case'
+UPPER_CAMEL_CASE  = 'upper_camel_case'
+LOWER_UNDERSCORES = 'lower_underscores'
+UPPER_UNDERSCORES = 'upper_underscores'
+
 # Settings
 DICTIONARY_SOURCE   = 'dictionary_source'
-MAXIMUM_QUERY_CHARS = 'maximum_query_characters'
-MAXIMUM_CACHE_WORDS = 'maximum_cache_words'
 CLEAR_SELECTION     = 'clear_selection'
 AUTO_DETECT_WORDS   = 'auto_detect_words'
 SKIP_WORDS          = 'skip_words'
@@ -21,18 +28,8 @@ FULL_INSPIRATION    = 'full_inspiration'
 ENABLE_CONTEXT_MENU = 'enable_context_menu'
 PROXY               = ''
 
-RANGE_OF_QUERY_CHARS = (1, 32)
-RANGE_OF_CACHE_WORDS = (0, 32768)
-
-LOWER_CAMEL_CASE  = 'lower_camel_case'
-UPPER_CAMEL_CASE  = 'upper_camel_case'
-LOWER_UNDERSCORES = 'lower_underscores'
-UPPER_UNDERSCORES = 'upper_underscores'
-
 # Default Settings Value
 DEFAULT_DIC_SROUCE          = ['Baidu']
-DEFAULT_MAX_QUERY_CHARS     = 32
-DEFAULT_MAX_CACHE_WORDS     = 512
 DEFAULT_CLEAR_SELECTION     = True
 DEFAULT_AUTO_DETECT_WORDS   = True
 DEFAULT_SKIP_WORDS          = ["A", "a", "the", "The"]
@@ -45,8 +42,6 @@ clear_global_cache = DICTIONARY_CACHE.clear
 
 settings = sublime.load_settings(SETTINGS_FILE)
 settings.add_on_change(DICTIONARY_SOURCE,   clear_global_cache)
-settings.add_on_change(MAXIMUM_QUERY_CHARS, clear_global_cache)
-settings.add_on_change(MAXIMUM_CACHE_WORDS, clear_global_cache)
 settings.add_on_change(FULL_INSPIRATION,    clear_global_cache)
 settings.add_on_change(SKIP_WORDS,          clear_global_cache)
 settings.add_on_change(PROXY,               clear_global_cache)
@@ -59,7 +54,7 @@ def to_upper_camel_case(string):
     return ''.join(a for a in string.title() if not a.isspace())
 
 def to_lower_underscores(string):
-    return string.replace(' ', '_').lower()
+    return re.sub('[ \']', '_', string).lower()
 
 def to_upper_underscores(string):
     a = to_lower_underscores(string)
@@ -83,13 +78,14 @@ class InsprQueryThread(threading.Thread):
     def run(self):
 
         cache = DICTIONARY_CACHE
-
-        word = self.view.substr(self.view.sel()[0])
-        if word == '':
-            return
-
         case_style     = self.args['case_style'] if 'case_style' in self.args else LOWER_CAMEL_CASE
         style_function = get_corresponding_style_function(case_style)
+
+        word = self.view.substr(self.view.sel()[0]).strip()
+        if settings.get(AUTO_DETECT_WORDS, DEFAULT_AUTO_DETECT_WORDS):
+            word = '' # detect_nearest_selection(word)
+        if len(word) == 0 or word.isspace():
+            return
 
         self.window.status_message('Search for: ' + word + '...')
 
@@ -103,10 +99,15 @@ class InsprQueryThread(threading.Thread):
         candidates = []
         dic_source = settings.get(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
 
-        if 'Baidu' in dic_source:
-            candidates += baidu_client.translate(word)
-        if 'Youdao' in dic_source:
-            candidates += youdao_client.translate(word)
+        if dic_source == None:
+            dic_source = DEFAULT_DIC_SROUCE
+
+        # set proxy
+        # set_proxy_if_available()
+
+        for dic in dic_source:
+            if dic in translator_map:
+                candidates += translator_map[dic].translate(word)
 
         for trans in candidates:
             case = style_function(trans)
@@ -119,23 +120,21 @@ class InsprQueryThread(threading.Thread):
             self.translations[idx] = re.sub('[-.:/]', '', val)
         self.translations = sorted(filter(isidentifier, set(self.translations)))
 
-        def cache_words():
-            cache_words_count = settings.get(MAXIMUM_CACHE_WORDS, DEFAULT_MAX_CACHE_WORDS)
-
-            if len(cache.keys()) > cache_words_count:
-                clear_global_cache()
-
-            if word not in cache:
-                cache[word] = {}
-
-            if case_style not in cache[word]:
-                cache[word][case_style] = []
-
-            cache[word][case_style] = self.translations
-
-        cache_words()
-
+        self.cache_words(cache, word, case_style)
         self.window.show_quick_panel(self.translations, self.on_done)
+
+    def cache_words(self, cache, word, case_style):
+
+        if len(cache.keys()) > MAXIMUM_CACHE_WORDS:
+            clear_global_cache()
+
+        if word not in cache:
+            cache[word] = {}
+
+        if case_style not in cache[word]:
+            cache[word][case_style] = []
+
+        cache[word][case_style] = self.translations
 
     def is_cache_hit(self, cache, word, case_style):
         return word in cache and case_style in cache[word]
@@ -272,11 +271,18 @@ style_functions = {
     UPPER_UNDERSCORES: to_upper_underscores
 }
 
+# Translator client map
+translator_map = {
+    'Youdao': youdao_client,
+    'Baidu':  baidu_client
+}
+
 def get_corresponding_style_function(case_style):
     mapper = style_functions
     return mapper[case_style] if case_style in mapper else to_lower_camel_case
 
 def get_json_content(base_url, args):
+
     url = base_url + urllib.parse.urlencode(args)
     response = urllib.request.urlopen(url, timeout=10)
 
