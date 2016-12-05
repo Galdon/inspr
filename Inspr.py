@@ -23,7 +23,7 @@ RANGE_OF_QUERY_CHARS = (1, 32)
 RANGE_OF_CACHE_WORDS = (0, 32768)
 
 # Default Settings Value
-DEFAULT_DIC_SROUCE          = ['Youdao']
+DEFAULT_DIC_SROUCE          = ['Baidu']
 DEFAULT_CASE_STYLE          = 'CamelCase'
 DEFAULT_MAX_QUERY_CHARS     = 32
 DEFAULT_MAX_CACHE_WORDS     = 512
@@ -34,17 +34,10 @@ DEFAULT_ENABLE_CONTEXT_MENU = True
 DEFAULT_PROXY               = ''
 
 # Youdao source
-YOUDAO_API_URL  = 'http://fanyi.youdao.com/openapi.do?'
-YOUDAO_API_ARGS = {
-    'key':     '1787962561',
-    'keyfrom': 'f2ec-org',
-    'type':    'data',
-    'doctype': 'json',
-    'version': '1.1',
-    'q':       ''
-}
+youdao_client = YoudaoTranslatorApi()
 
 # Baidu source
+baidu_client  = BaiduTranslatorApi()
 
 GLOBAL_CACHE = {}
 clear_global_cache = GLOBAL_CACHE.clear
@@ -134,26 +127,15 @@ class InsprQueryThread(threading.Thread):
                 self.view.window().show_quick_panel(self.available_trans, self.on_done)
                 return
 
-        YOUDAO_API_ARGS['q'] = sel
-        result = get_response_json(YOUDAO_API_URL, YOUDAO_API_ARGS)
-
-        if 'errorCode' in result:
-            if result['errorCode'] != 0:
-                return
-
+        # select source
         candidates = []
+        dic_source = settings.get(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
 
-        if 'translation' in result:
-            for v in result['translation']:
-                candidates.append(v)
-        if 'web' in result:
-            full_inspiration = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
-            for web in result['web']:
-                match_sel = sel == web['key']
-                value = web['value']
-                if full_inspiration or match_sel:
-                    for v in web['value']:
-                        candidates.append(v)
+        if 'Baidu' in dic_source:
+            print()
+            # candidates += baidu_client.translate(sel)
+        if 'Youdao' in dic_source:
+            candidates += youdao_client.translate(sel)
 
         case_style = self.args['camel_case_type']
 
@@ -191,6 +173,47 @@ class InsprQueryThread(threading.Thread):
 
         sublime.set_timeout(replace_selection, 10)
 
+class YoudaoTranslatorApi(object):
+
+    KEY      = '1787962561'
+    KEY_FROM = 'f2ec'
+    URL      = 'http://fanyi.youdao.com/openapi.do?'
+    ARGS     = {
+        'key':     KEY,
+        'keyfrom': KEY_FROM,
+        'type':    'data',
+        'doctype': 'json',
+        'version': '1.1',
+        'q':       ''
+    }
+
+    def translate(self, query):
+
+        self.ARGS['q'] = query
+
+        result = get_response_json(self.URL, self.ARGS)
+        candidates = []
+
+        print(result)
+        if 'errorCode' in result:
+            if result['errorCode'] != 0:
+                return candidates
+        print(candidates)
+        if 'translation' in result:
+            for v in result['translation']:
+                candidates.append(v)
+        print(candidates)
+        if 'web' in result:
+            full_inspiration = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
+            for web in result['web']:
+                match_sel = sel == web['key']
+                value = web['value']
+                if full_inspiration or match_sel:
+                    for v in web['value']:
+                        candidates.append(v)
+
+        return candidates
+
 class BaiduTranslatorApi(object):
 
     APP_ID     = '20161205000033482'
@@ -214,13 +237,16 @@ class BaiduTranslatorApi(object):
         self.ARGS['q']    = query
 
         result = get_response_json(self.URL, self.ARGS)
-        available_trans = []
+        candidates = []
+
+        if 'error_code' in result:
+            return candidates
 
         if 'trans_result' in result:
             for trans in result['trans_result']:
-                available_trans.append(trans['dst'])
+                candidates.append(trans['dst'])
 
-        return available_trans
+        return candidates
 
     def rand(self):
         return random.randint(32768, 65536)

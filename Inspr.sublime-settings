@@ -1,6 +1,6 @@
 {
-	// Youdao, Google, Microsoft
-	"dictionary_source": ["Youdao"],
+	// Baidu, Youdao
+	"dictionary_source": ["Youdao", "Baidu"],
 
 	// CamelCase, Underline
 	"case_style": "CamelCase",
