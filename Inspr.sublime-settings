@@ -1,22 +1,18 @@
 {
-	// Baidu, Youdao
+	// Source of dictionaries
 	"dictionary_source": ["Youdao", "Baidu"],
 
-	// CamelCase, Underline
-	"case_style": "CamelCase",
-
-	// Maximum
 	"maximum_query_characters": 32,
 
 	"maximum_cache_words": 512,
 
-	// +
 	"clear_selection": true,
+
+	"auto_detect_words": true,
 
 	"skip_words": ["A", "a", "the", "The"],
 
-	// +
-	"full_inspiration": false,
+	"full_inspiration": true,
 
 	"enable_context_menu": true,
 

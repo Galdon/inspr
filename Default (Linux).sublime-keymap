@@ -1,0 +1,22 @@
+[
+    {
+        "keys": ["ctrl+alt+i"],
+        "command": "inspr",
+        "args": { "case_style": "lower_camel_case" }
+    },
+    {
+        "keys": ["ctrl+shift+alt+i"],
+        "command": "inspr",
+        "args": { "case_style": "upper_camel_case" }
+    },
+    {
+        "keys": ["ctrl+alt+u"],
+        "command": "inspr",
+        "args": { "case_style": "lower_underscores" }
+    },
+    {
+        "keys": ["ctrl+shift+alt+u"],
+        "command": "inspr",
+        "args": { "case_style": "upper_underscores" }
+    },
+]

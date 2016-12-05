@@ -1,4 +1,22 @@
 [
-    { "keys": ["ctrl+command+i"], "command": "inspr", "args": { "camel_case_type": "lower" } },
-    { "keys": ["ctrl+shift+command+i"], "command": "inspr", "args": { "camel_case_type": "upper" } }
+    {
+        "keys": ["ctrl+command+i"],
+        "command": "inspr",
+        "args": { "case_style": "lower_camel_case" }
+    },
+    {
+        "keys": ["ctrl+shift+command+i"],
+        "command": "inspr",
+        "args": { "case_style": "upper_camel_case" }
+    },
+    {
+        "keys": ["ctrl+command+u"],
+        "command": "inspr",
+        "args": { "case_style": "lower_underscores" }
+    },
+    {
+        "keys": ["ctrl+shift+command+u"],
+        "command": "inspr",
+        "args": { "case_style": "upper_underscores" }
+    },
 ]

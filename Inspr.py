@@ -1,19 +1,21 @@
+import hashlib
+import json
+import random
+import re
 import sublime
 import sublime_plugin
-import urllib
-import json
 import threading
-import random
-import hashlib
+import urllib
+from socket import timeout
 
-SETTING_FILE = 'Inspr.sublime-settings'
+SETTINGS_FILE = 'Inspr.sublime-settings'
 
 # Settings
 DICTIONARY_SOURCE   = 'dictionary_source'
-CASE_STYLE          = 'case_style'
 MAXIMUM_QUERY_CHARS = 'maximum_query_characters'
 MAXIMUM_CACHE_WORDS = 'maximum_cache_words'
 CLEAR_SELECTION     = 'clear_selection'
+AUTO_DETECT_WORDS   = 'auto_detect_words'
 SKIP_WORDS          = 'skip_words'
 FULL_INSPIRATION    = 'full_inspiration'
 ENABLE_CONTEXT_MENU = 'enable_context_menu'
@@ -22,53 +24,134 @@ PROXY               = ''
 RANGE_OF_QUERY_CHARS = (1, 32)
 RANGE_OF_CACHE_WORDS = (0, 32768)
 
+LOWER_CAMEL_CASE  = 'lower_camel_case'
+UPPER_CAMEL_CASE  = 'upper_camel_case'
+LOWER_UNDERSCORES = 'lower_underscores'
+UPPER_UNDERSCORES = 'upper_underscores'
+
 # Default Settings Value
 DEFAULT_DIC_SROUCE          = ['Baidu']
-DEFAULT_CASE_STYLE          = 'CamelCase'
 DEFAULT_MAX_QUERY_CHARS     = 32
 DEFAULT_MAX_CACHE_WORDS     = 512
 DEFAULT_CLEAR_SELECTION     = True
+DEFAULT_AUTO_DETECT_WORDS   = True
 DEFAULT_SKIP_WORDS          = ["A", "a", "the", "The"]
 DEFAULT_FULL_INSPIRATION    = False
 DEFAULT_ENABLE_CONTEXT_MENU = True
 DEFAULT_PROXY               = ''
 
-# Youdao source
-youdao_client = YoudaoTranslatorApi()
+DICTIONARY_CACHE = {}
+clear_global_cache = DICTIONARY_CACHE.clear
 
-# Baidu source
-baidu_client  = BaiduTranslatorApi()
-
-GLOBAL_CACHE = {}
-clear_global_cache = GLOBAL_CACHE.clear
-
-settings = sublime.load_settings(SETTING_FILE)
-settings.add_on_change(DICTIONARY_SOURCE, clear_global_cache)
+settings = sublime.load_settings(SETTINGS_FILE)
+settings.add_on_change(DICTIONARY_SOURCE,   clear_global_cache)
 settings.add_on_change(MAXIMUM_QUERY_CHARS, clear_global_cache)
 settings.add_on_change(MAXIMUM_CACHE_WORDS, clear_global_cache)
-settings.add_on_change(FULL_INSPIRATION, clear_global_cache)
-settings.add_on_change(SKIP_WORDS, clear_global_cache)
-settings.add_on_change(PROXY, clear_global_cache)
+settings.add_on_change(FULL_INSPIRATION,    clear_global_cache)
+settings.add_on_change(SKIP_WORDS,          clear_global_cache)
+settings.add_on_change(PROXY,               clear_global_cache)
 
-def upper_camel_case(x):
-    s = ''.join(a for a in x.title() if not a.isspace())
-    return s
+def to_lower_camel_case(string):
+    s = to_upper_camel_case(string)
+    return ''.join(word[0].lower() + word[1:] for word in s.split())
 
-def lower_camel_case(x):
-    s = upper_camel_case(x)
-    lst = [word[0].lower() + word[1:] for word in s.split()]
-    s = ''.join(lst)
-    return s
+def to_upper_camel_case(string):
+    return ''.join(a for a in string.title() if not a.isspace())
 
-def get_response_json(base_url, args):
-    url = base_url + urllib.parse.urlencode(args)
-    response = urllib.request.urlopen(url)
+def to_lower_underscores(string):
+    return string.replace(' ', '_').lower()
 
-    data = response.read()
-    encoding = response.info().get_content_charset('utf-8')
-    result = json.loads(data.decode(encoding))
+def to_upper_underscores(string):
+    a = to_lower_underscores(string)
+    return a.upper()
 
-    return result
+class InsprCommand(sublime_plugin.TextCommand):
+
+    def run(self, edit, **args):
+        InsprQueryThread(edit, self.view, **args).start()
+
+class InsprQueryThread(threading.Thread):
+
+    def __init__(self, edit, view, **args):
+        self.edit         = edit
+        self.view         = view
+        self.window       = view.window()
+        self.translations = []
+        self.args         = args
+        threading.Thread.__init__(self)
+
+    def run(self):
+
+        cache = DICTIONARY_CACHE
+
+        word = self.view.substr(self.view.sel()[0])
+        if word == '':
+            return
+
+        case_style     = self.args['case_style'] if 'case_style' in self.args else LOWER_CAMEL_CASE
+        style_function = get_corresponding_style_function(case_style)
+
+        self.window.status_message('Search for: ' + word + '...')
+
+        # if cache hit
+        if self.is_cache_hit(cache, word, case_style):
+            cached_trans = cache[word][case_style]
+            self.window.show_quick_panel(cached_trans, self.on_done)
+            return
+
+        # select source
+        candidates = []
+        dic_source = settings.get(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
+
+        if 'Baidu' in dic_source:
+            candidates += baidu_client.translate(word)
+        if 'Youdao' in dic_source:
+            candidates += youdao_client.translate(word)
+
+        for trans in candidates:
+            case = style_function(trans)
+            self.translations.append(case)
+
+        def isidentifier(string):
+            return re.match('[0-9a-zA-Z_]+', string) != None
+
+        for idx, val in enumerate(self.translations):
+            self.translations[idx] = re.sub('[-.:/]', '', val)
+        self.translations = sorted(filter(isidentifier, set(self.translations)))
+
+        def cache_words():
+            cache_words_count = settings.get(MAXIMUM_CACHE_WORDS, DEFAULT_MAX_CACHE_WORDS)
+
+            if len(cache.keys()) > cache_words_count:
+                clear_global_cache()
+
+            if word not in cache:
+                cache[word] = {}
+
+            if case_style not in cache[word]:
+                cache[word][case_style] = []
+
+            cache[word][case_style] = self.translations
+
+        cache_words()
+
+        self.window.show_quick_panel(self.translations, self.on_done)
+
+    def is_cache_hit(self, cache, word, case_style):
+        return word in cache and case_style in cache[word]
+
+    def on_done(self, picked):
+
+        if picked == -1:
+            return
+
+        trans = self.translations[picked]
+        args = { 'text': trans }
+
+        def replace_selection():
+            self.view.run_command("inspr_replace_selection", args)
+
+        sublime.set_timeout(replace_selection, 10)
 
 class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
@@ -83,8 +166,8 @@ class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
         view.replace(edit, selection[0], translation)
 
-        clear_selection = settings.get(CLEAR_SELECTION, DEFAULT_CLEAR_SELECTION)
-        if clear_selection == False:
+        clear_sel = settings.get(CLEAR_SELECTION, DEFAULT_CLEAR_SELECTION)
+        if not clear_sel:
             return
 
         pt = selection[0].end()
@@ -94,89 +177,10 @@ class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
         view.show(pt)
 
-class InsprCommand(sublime_plugin.TextCommand):
-
-    def run(self, edit, **args):
-        InsprQueryThread(edit, self.view, **args).start()
-
-class InsprQueryThread(threading.Thread):
-
-    def __init__(self, edit, view, **args):
-        self.edit = edit
-        self.view = view
-        self.window = view.window()
-        self.available_trans = []
-        self.args = args
-        threading.Thread.__init__(self)
-
-    def run(self):
-
-        cache = GLOBAL_CACHE
-
-        sel = self.view.substr(self.view.sel()[0])
-        if sel == '':
-            return
-
-        # if cache hit
-        if sel in cache:
-            cache_styles = cache[sel]
-            code_style = self.args['camel_case_type']
-            if code_style in cache_styles:
-                cache_trans = cache_styles[code_style]
-                self.available_trans = cache_trans
-                self.view.window().show_quick_panel(self.available_trans, self.on_done)
-                return
-
-        # select source
-        candidates = []
-        dic_source = settings.get(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
-
-        if 'Baidu' in dic_source:
-            print()
-            # candidates += baidu_client.translate(sel)
-        if 'Youdao' in dic_source:
-            candidates += youdao_client.translate(sel)
-
-        case_style = self.args['camel_case_type']
-
-        for trans in candidates:
-            case = upper_camel_case(trans) if case_style == 'upper' else lower_camel_case(trans)
-            self.available_trans.append(case)
-
-        self.available_trans = sorted(set(self.available_trans))
-
-        def cache_words():
-            cache_words_count = settings.get(MAXIMUM_CACHE_WORDS, DEFAULT_MAX_CACHE_WORDS)
-            if len(cache.keys()) > cache_words_count:
-                cache.clear()
-
-            if sel not in cache:
-                cache[sel] = {}
-
-            if case_style not in cache[sel]:
-                cache[sel][case_style] = []
-
-            cache[sel][case_style] = self.available_trans
-
-        cache_words()
-        self.window.show_quick_panel(self.available_trans, self.on_done)
-
-    def on_done(self, picked):
-
-        if picked == -1:
-            return
-        trans = self.available_trans[picked]
-
-        args = { 'text': trans }
-        def replace_selection():
-            self.view.run_command("inspr_replace_selection", args)
-
-        sublime.set_timeout(replace_selection, 10)
-
-class YoudaoTranslatorApi(object):
+class YoudaoTranslator(object):
 
     KEY      = '1787962561'
-    KEY_FROM = 'f2ec'
+    KEY_FROM = 'f2ec-org'
     URL      = 'http://fanyi.youdao.com/openapi.do?'
     ARGS     = {
         'key':     KEY,
@@ -191,30 +195,26 @@ class YoudaoTranslatorApi(object):
 
         self.ARGS['q'] = query
 
-        result = get_response_json(self.URL, self.ARGS)
+        result = get_json_content(self.URL, self.ARGS)
         candidates = []
 
-        print(result)
         if 'errorCode' in result:
             if result['errorCode'] != 0:
                 return candidates
-        print(candidates)
         if 'translation' in result:
-            for v in result['translation']:
-                candidates.append(v)
-        print(candidates)
+            for trans in result['translation']:
+                candidates.append(trans)
         if 'web' in result:
-            full_inspiration = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
+            full_inspr = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
             for web in result['web']:
-                match_sel = sel == web['key']
-                value = web['value']
-                if full_inspiration or match_sel:
-                    for v in web['value']:
-                        candidates.append(v)
+                strictly_matched = query == web['key']
+                if full_inspr or strictly_matched:
+                    for trans in web['value']:
+                        candidates.append(trans)
 
         return candidates
 
-class BaiduTranslatorApi(object):
+class BaiduTranslator(object):
 
     APP_ID     = '20161205000033482'
     SECRET_KEY = 'bFPDI4jI5jI61S7VpyLR'
@@ -236,7 +236,7 @@ class BaiduTranslatorApi(object):
         self.ARGS['sign'] = self.get_sign(salt, query)
         self.ARGS['q']    = query
 
-        result = get_response_json(self.URL, self.ARGS)
+        result = get_json_content(self.URL, self.ARGS)
         candidates = []
 
         if 'error_code' in result:
@@ -257,3 +257,33 @@ class BaiduTranslatorApi(object):
         md5.update(sign.encode('utf-8'))
         sign = md5.hexdigest()
         return sign
+
+# Youdao source
+youdao_client = YoudaoTranslator()
+
+# Baidu source
+baidu_client  = BaiduTranslator()
+
+# Style fuction map
+style_functions = {
+    LOWER_CAMEL_CASE:  to_lower_camel_case,
+    UPPER_CAMEL_CASE:  to_upper_camel_case,
+    LOWER_UNDERSCORES: to_lower_underscores,
+    UPPER_UNDERSCORES: to_upper_underscores
+}
+
+def get_corresponding_style_function(case_style):
+    mapper = style_functions
+    return mapper[case_style] if case_style in mapper else to_lower_camel_case
+
+def get_json_content(base_url, args):
+    url = base_url + urllib.parse.urlencode(args)
+    response = urllib.request.urlopen(url, timeout=10)
+
+    data     = response.read()
+    encoding = response.info().get_content_charset('utf-8')
+    result   = json.loads(data.decode(encoding))
+
+    response.close()
+
+    return result

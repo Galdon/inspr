@@ -1,4 +1,22 @@
 [
-    { "caption": "Inspr: Inspr Me (lowerCamelCase)", "command": "inspr", "args": { "camel_case_type": "lower" } },
-    { "caption": "Inspr: Inspr Me (UpperCamelCase)", "command": "inspr", "args": { "camel_case_type": "upper" } }
+    {
+        "caption": "Inspr: Inspr Me (lowerCamelCase)",
+        "command": "inspr",
+        "args": { "case_style": "lower_camel_case" }
+    },
+    {
+        "caption": "Inspr: Inspr Me (UpperCamelCase)",
+        "command": "inspr",
+        "args": { "case_style": "upper_camel_case" }
+    },
+    {
+        "caption": "Inspr: Inspr Me (lower_underscores)",
+        "command": "inspr",
+        "args": { "case_style": "lower_underscores" }
+    },
+    {
+        "caption": "Inspr: Inspr Me (UPPER_UNDERSCORES)",
+        "command": "inspr",
+        "args": { "case_style": "upper_underscores" }
+    }
 ]
