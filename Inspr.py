@@ -3,6 +3,8 @@ import sublime_plugin
 import urllib
 import json
 import threading
+import random
+import hashlib
 
 SETTING_FILE = 'Inspr.sublime-settings'
 
@@ -42,7 +44,7 @@ YOUDAO_API_ARGS = {
     'q':       ''
 }
 
-# Microsoft source
+# Baidu source
 
 GLOBAL_CACHE = {}
 clear_global_cache = GLOBAL_CACHE.clear
@@ -188,3 +190,44 @@ class InsprQueryThread(threading.Thread):
             self.view.run_command("inspr_replace_selection", args)
 
         sublime.set_timeout(replace_selection, 10)
+
+class BaiduTranslatorApi(object):
+
+    APP_ID     = '20161205000033482'
+    SECRET_KEY = 'bFPDI4jI5jI61S7VpyLR'
+    URL        = 'http://api.fanyi.baidu.com/api/trans/vip/translate?'
+    ARGS       = {
+        'appid': APP_ID,
+        'from':  'zh',
+        'to':    'en',
+        'salt':  '',
+        'sign':  '',
+        'q':     ''
+    }
+
+    def translate(self, query):
+
+        salt = self.rand()
+
+        self.ARGS['salt'] = salt
+        self.ARGS['sign'] = self.get_sign(salt, query)
+        self.ARGS['q']    = query
+
+        result = get_response_json(self.URL, self.ARGS)
+        available_trans = []
+
+        if 'trans_result' in result:
+            for trans in result['trans_result']:
+                available_trans.append(trans['dst'])
+
+        return available_trans
+
+    def rand(self):
+        return random.randint(32768, 65536)
+
+    def get_sign(self, salt, query):
+        sign = self.APP_ID + query + str(salt) + self.SECRET_KEY
+        md5  = hashlib.md5()
+        md5.update(sign.encode('utf-8'))
+        sign = md5.hexdigest()
+        return sign
