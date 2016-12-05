@@ -10,10 +10,12 @@
 
 	"maximum_cache_words": 512,
 
+	// +
 	"clear_selection": true,
 
-	"skip_pronoun": true,
+	"skip_words": ["A", "a", "the", "The"],
 
+	// +
 	"full_inspiration": false,
 
 	"enable_context_menu": true,

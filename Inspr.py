@@ -12,7 +12,7 @@ CASE_STYLE          = 'case_style'
 MAXIMUM_QUERY_CHARS = 'maximum_query_characters'
 MAXIMUM_CACHE_WORDS = 'maximum_cache_words'
 CLEAR_SELECTION     = 'clear_selection'
-SKIP_PRONOUN        = 'skip_pronoun'
+SKIP_WORDS          = 'skip_words'
 FULL_INSPIRATION    = 'full_inspiration'
 ENABLE_CONTEXT_MENU = 'enable_context_menu'
 PROXY               = ''
@@ -26,7 +26,7 @@ DEFAULT_CASE_STYLE          = 'CamelCase'
 DEFAULT_MAX_QUERY_CHARS     = 32
 DEFAULT_MAX_CACHE_WORDS     = 512
 DEFAULT_CLEAR_SELECTION     = True
-DEFAULT_SKIP_PRONOUN        = True
+DEFAULT_SKIP_WORDS          = ["A", "a", "the", "The"]
 DEFAULT_FULL_INSPIRATION    = False
 DEFAULT_ENABLE_CONTEXT_MENU = True
 DEFAULT_PROXY               = ''
@@ -42,11 +42,18 @@ YOUDAO_API_ARGS = {
     'q':       ''
 }
 
-# Google source
 # Microsoft source
 
 GLOBAL_CACHE = {}
+clear_global_cache = GLOBAL_CACHE.clear
+
 settings = sublime.load_settings(SETTING_FILE)
+settings.add_on_change(DICTIONARY_SOURCE, clear_global_cache)
+settings.add_on_change(MAXIMUM_QUERY_CHARS, clear_global_cache)
+settings.add_on_change(MAXIMUM_CACHE_WORDS, clear_global_cache)
+settings.add_on_change(FULL_INSPIRATION, clear_global_cache)
+settings.add_on_change(SKIP_WORDS, clear_global_cache)
+settings.add_on_change(PROXY, clear_global_cache)
 
 def upper_camel_case(x):
     s = ''.join(a for a in x.title() if not a.isspace())
@@ -57,6 +64,16 @@ def lower_camel_case(x):
     lst = [word[0].lower() + word[1:] for word in s.split()]
     s = ''.join(lst)
     return s
+
+def get_response_json(base_url, args):
+    url = base_url + urllib.parse.urlencode(args)
+    response = urllib.request.urlopen(url)
+
+    data = response.read()
+    encoding = response.info().get_content_charset('utf-8')
+    result = json.loads(data.decode(encoding))
+
+    return result
 
 class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
@@ -116,13 +133,7 @@ class InsprQueryThread(threading.Thread):
                 return
 
         YOUDAO_API_ARGS['q'] = sel
-
-        url = YOUDAO_API_URL + urllib.parse.urlencode(YOUDAO_API_ARGS)
-        response = urllib.request.urlopen(url)
-
-        data = response.read()
-        encoding = response.info().get_content_charset('utf-8')
-        result = json.loads(data.decode(encoding))
+        result = get_response_json(YOUDAO_API_URL, YOUDAO_API_ARGS)
 
         if 'errorCode' in result:
             if result['errorCode'] != 0:
@@ -134,20 +145,18 @@ class InsprQueryThread(threading.Thread):
             for v in result['translation']:
                 candidates.append(v)
         if 'web' in result:
+            full_inspiration = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
             for web in result['web']:
-                if web['key'] == sel:
-                    value = web['value']
-                    for v in value:
+                match_sel = sel == web['key']
+                value = web['value']
+                if full_inspiration or match_sel:
+                    for v in web['value']:
                         candidates.append(v)
 
         case_style = self.args['camel_case_type']
 
         for trans in candidates:
-            case = ''
-            if case_style == 'upper':
-                case = upper_camel_case(trans)
-            else:
-                case = lower_camel_case(trans)
+            case = upper_camel_case(trans) if case_style == 'upper' else lower_camel_case(trans)
             self.available_trans.append(case)
 
         self.available_trans = sorted(set(self.available_trans))
@@ -179,4 +188,3 @@ class InsprQueryThread(threading.Thread):
             self.view.run_command("inspr_replace_selection", args)
 
         sublime.set_timeout(replace_selection, 10)
-
