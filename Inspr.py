@@ -7,6 +7,7 @@ import sublime_plugin
 import threading
 import urllib
 from socket import timeout
+import codecs
 
 SETTINGS_FILE = 'Inspr.sublime-settings'
 
@@ -178,8 +179,8 @@ class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
 class YoudaoTranslator(object):
 
-    KEY      = '1787962561'
-    KEY_FROM = 'f2ec-org'
+    KEY      = '672847864'
+    KEY_FROM = 'InsprMe'
     URL      = 'http://fanyi.youdao.com/openapi.do?'
     ARGS     = {
         'key':     KEY,
