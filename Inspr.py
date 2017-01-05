@@ -6,12 +6,12 @@ import sublime
 import sublime_plugin
 import threading
 import urllib
-from socket import timeout
+import socket
 import codecs
 
 SETTINGS_FILE = 'Inspr.sublime-settings'
 
-MAXIMUM_QUERY_CHARS = 32
+MAXIMUM_QUERY_CHARS = 64
 MAXIMUM_CACHE_WORDS = 32768
 
 # Case styles
@@ -26,8 +26,7 @@ CLEAR_SELECTION     = 'clear_selection'
 AUTO_DETECT_WORDS   = 'auto_detect_words'
 SKIP_WORDS          = 'skip_words'
 FULL_INSPIRATION    = 'full_inspiration'
-ENABLE_CONTEXT_MENU = 'enable_context_menu'
-PROXY               = ''
+HTTP_PROXY          = 'http_proxy'
 
 # Default Settings Value
 DEFAULT_DIC_SROUCE          = ['Baidu']
@@ -35,8 +34,7 @@ DEFAULT_CLEAR_SELECTION     = True
 DEFAULT_AUTO_DETECT_WORDS   = True
 DEFAULT_SKIP_WORDS          = ["A", "a", "the", "The"]
 DEFAULT_FULL_INSPIRATION    = False
-DEFAULT_ENABLE_CONTEXT_MENU = True
-DEFAULT_PROXY               = ''
+DEFAULT_HTTP_PROXY          = ''
 
 DICTIONARY_CACHE = {}
 clear_global_cache = DICTIONARY_CACHE.clear
@@ -45,7 +43,9 @@ settings = sublime.load_settings(SETTINGS_FILE)
 settings.add_on_change(DICTIONARY_SOURCE,   clear_global_cache)
 settings.add_on_change(FULL_INSPIRATION,    clear_global_cache)
 settings.add_on_change(SKIP_WORDS,          clear_global_cache)
-settings.add_on_change(PROXY,               clear_global_cache)
+settings.add_on_change(HTTP_PROXY,          clear_global_cache)
+
+socket.setdefaulttimeout(10)
 
 def to_lower_camel_case(string):
     s = to_upper_camel_case(string)
@@ -118,7 +118,7 @@ class InsprQueryThread(threading.Thread):
             return re.match('[0-9a-zA-Z_]+', string) != None
 
         for idx, val in enumerate(self.translations):
-            self.translations[idx] = re.sub('[-.:/]', '', val)
+            self.translations[idx] = re.sub('[-.:/,]', '', val)
         self.translations = sorted(filter(isidentifier, set(self.translations)))
 
         self.cache_words(cache, word, case_style)
@@ -284,8 +284,18 @@ def get_corresponding_style_function(case_style):
 
 def get_json_content(base_url, args):
 
+    req = urllib.request
+
+    # set proxy
+    proxy = settings.get(HTTP_PROXY, DEFAULT_HTTP_PROXY)
+
+    if proxy != '':
+        proxy_opener = req.ProxyHandler({'http': proxy})
+        req.install_opener(req.build_opener(proxy_opener))
+        print('using http proxy: %s' % proxy)
+
     url = base_url + urllib.parse.urlencode(args)
-    response = urllib.request.urlopen(url, timeout=10)
+    response = req.urlopen(url)
 
     data     = response.read()
     encoding = response.info().get_content_charset('utf-8')
