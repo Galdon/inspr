@@ -3,16 +3,21 @@ import hashlib
 import json
 import random
 import re
-import socket
 import sublime
 import sublime_plugin
 import threading
 import urllib
+from socket import timeout
 
 SETTINGS_FILE = 'Inspr.sublime-settings'
 
 MAXIMUM_QUERY_CHARS = 64
 MAXIMUM_CACHE_WORDS = 32768
+
+# Error Code
+OK              = 0
+NETWORK_TIMEOUT = 1
+EMPTY_RESPONSE  = 2
 
 # Case styles
 LOWER_CAMEL_CASE  = 'lower_camel_case'
@@ -44,8 +49,6 @@ settings.add_on_change(DICTIONARY_SOURCE,   clear_global_cache)
 settings.add_on_change(FULL_INSPIRATION,    clear_global_cache)
 settings.add_on_change(SKIP_WORDS,          clear_global_cache)
 settings.add_on_change(HTTP_PROXY,          clear_global_cache)
-
-socket.setdefaulttimeout(10)
 
 def to_lower_camel_case(string):
     s = to_upper_camel_case(string)
@@ -97,18 +100,16 @@ class InsprQueryThread(threading.Thread):
             return
 
         # select source
+        cause = OK
         candidates = []
         dic_source = settings.get(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
 
         if dic_source == None:
             dic_source = DEFAULT_DIC_SROUCE
 
-        # set proxy
-        # set_proxy_if_available()
-
         for dic in dic_source:
             if dic in translator_map:
-                candidates += translator_map[dic].translate(word)
+                (cause, candidates) = translator_map[dic].translate(word)
 
         for trans in candidates:
             case = style_function(trans)
@@ -121,8 +122,14 @@ class InsprQueryThread(threading.Thread):
             self.translations[idx] = re.sub('[-.:/,]', '', val)
         self.translations = sorted(filter(isidentifier, set(self.translations)))
 
-        self.cache_words(cache, word, case_style)
-        self.window.show_quick_panel(self.translations, self.on_done)
+        if self.translations and cause == OK:
+            self.cache_words(cache, word, case_style)
+            self.window.show_quick_panel(self.translations, self.on_done)
+        else:
+            if cause == EMPTY_RESPONSE:
+                self.view.show_popup('无结果，换个名称吧')
+            elif cause == NETWORK_TIMEOUT:
+                self.view.show_popup('连接超时，请检查网络与配置')
 
     def cache_words(self, cache, word, case_style):
 
@@ -195,12 +202,17 @@ class YoudaoTranslator(object):
 
         self.ARGS['q'] = query
 
-        result = get_json_content(self.URL, self.ARGS)
+        result = {}
         candidates = []
+
+        try:
+            result = get_json_content(self.URL, self.ARGS)
+        except urllib.error.URLError:
+            return (NETWORK_TIMEOUT, candidates)
 
         if 'errorCode' in result:
             if result['errorCode'] != 0:
-                return candidates
+                return (EMPTY_RESPONSE, candidates)
         if 'translation' in result:
             for trans in result['translation']:
                 candidates.append(trans)
@@ -212,7 +224,7 @@ class YoudaoTranslator(object):
                     for trans in web['value']:
                         candidates.append(trans)
 
-        return candidates
+        return (OK, candidates)
 
 class BaiduTranslator(object):
 
@@ -236,17 +248,22 @@ class BaiduTranslator(object):
         self.ARGS['sign'] = self.get_sign(salt, query)
         self.ARGS['q']    = query
 
-        result = get_json_content(self.URL, self.ARGS)
+        result = {}
         candidates = []
 
+        try:
+            result = get_json_content(self.URL, self.ARGS)
+        except urllib.error.URLError:
+            return (NETWORK_TIMEOUT, candidates)
+
         if 'error_code' in result:
-            return candidates
+            return (EMPTY_RESPONSE, candidates)
 
         if 'trans_result' in result:
             for trans in result['trans_result']:
                 candidates.append(trans['dst'])
 
-        return candidates
+        return (OK, candidates)
 
     def rand(self):
         return random.randint(32768, 65536)
@@ -289,13 +306,13 @@ def get_json_content(base_url, args):
     # set proxy
     proxy = settings.get(HTTP_PROXY, DEFAULT_HTTP_PROXY)
 
+    opener = None
     if proxy != '':
         proxy_opener = req.ProxyHandler({'http': proxy})
-        req.install_opener(req.build_opener(proxy_opener))
-        print('using http proxy: %s' % proxy)
+        opener = req.build_opener(proxy_opener)
 
     url = base_url + urllib.parse.urlencode(args)
-    response = req.urlopen(url)
+    response = opener.open(url, timeout=1) if opener != None else req.urlopen(url, timeout=1)
 
     data     = response.read()
     encoding = response.info().get_content_charset('utf-8')
