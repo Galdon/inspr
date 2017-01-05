@@ -109,7 +109,7 @@ class InsprQueryThread(threading.Thread):
 
         word = self.view.substr(self.view.sel()[0]).strip()
         if settings.get(AUTO_DETECT_WORDS, DEFAULT_AUTO_DETECT_WORDS):
-            word = '' # detect_nearest_selection(word)
+            word = word # detect_nearest_selection(word)
         if len(word) == 0 or word.isspace():
             return
 
