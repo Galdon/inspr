@@ -16,8 +16,29 @@ MAXIMUM_CACHE_WORDS = 32768
 
 # Error Code
 OK              = 0
-NETWORK_TIMEOUT = 1
-EMPTY_RESPONSE  = 2
+EMPTY_RESPONSE  = 1
+NETWORK_TIMEOUT = 2
+
+ERROR_MSG = {
+    OK:              '',
+    EMPTY_RESPONSE:  '无结果，换个关键字吧',
+    NETWORK_TIMEOUT: '连接超时，请检查网络与配置',
+    20:              '要翻译的文本过长',
+    30:              '有道：无法进行有效的翻译',
+    40:              '有道：不支持的语言类型',
+    50:              '有道：无效的 key',
+    60:              '有道：无词典结果，仅在获取词典结果生效',
+    52001:           '百度：请求超时，请检查网络与配置',
+    52002:           '百度：系统错误，请重试',
+    52003:           '百度：未授权用户，请检查 appid 是否正确',
+    54000:           '百度：必填参数为空，请检查是否少传参数',
+    58000:           '百度：客户端 IP 非法',
+    54001:           '百度：签名错误，请请检查签名生成方法',
+    54003:           '百度：访问频率受限，请降低调用频率',
+    58001:           '百度：译文语言方向不支持',
+    54004:           '百度：账户余额不足',
+    54005:           '百度：长 query 请求频繁，请降低长 query 的发送频率'
+}
 
 # Case styles
 LOWER_CAMEL_CASE  = 'lower_camel_case'
@@ -95,12 +116,13 @@ class InsprQueryThread(threading.Thread):
 
         # if cache hit
         if self.is_cache_hit(cache, word, case_style):
-            cached_trans = cache[word][case_style]
-            self.window.show_quick_panel(cached_trans, self.on_done)
+            self.translations += cache[word][case_style]
+            self.window.show_quick_panel(self.translations, self.on_done)
             return
 
         # select source
-        cause = OK
+        cause = 0
+        causes = []
         candidates = []
         dic_source = settings.get(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
 
@@ -109,7 +131,12 @@ class InsprQueryThread(threading.Thread):
 
         for dic in dic_source:
             if dic in translator_map:
-                (cause, candidates) = translator_map[dic].translate(word)
+                (c, candidate) = translator_map[dic].translate(word)
+                causes.append(c)
+                candidates += candidate
+
+        if OK not in causes:
+            cause = causes[0]
 
         for trans in candidates:
             case = style_function(trans)
@@ -124,12 +151,9 @@ class InsprQueryThread(threading.Thread):
 
         if self.translations and cause == OK:
             self.cache_words(cache, word, case_style)
-            self.window.show_quick_panel(self.translations, self.on_done)
+            self.window.show_quick_panel(self.translations, self.on_done, sublime.MONOSPACE_FONT)
         else:
-            if cause == EMPTY_RESPONSE:
-                self.view.show_popup('无结果，换个名称吧')
-            elif cause == NETWORK_TIMEOUT:
-                self.view.show_popup('连接超时，请检查网络与配置')
+            self.view.show_popup(ERROR_MSG[int(cause)])
 
     def cache_words(self, cache, word, case_style):
 
@@ -200,7 +224,7 @@ class YoudaoTranslator(object):
 
     def translate(self, query):
 
-        self.ARGS['q'] = query
+        self.ARGS['q'] = query.encode('utf-8')
 
         result = {}
         candidates = []
@@ -212,7 +236,7 @@ class YoudaoTranslator(object):
 
         if 'errorCode' in result:
             if result['errorCode'] != 0:
-                return (EMPTY_RESPONSE, candidates)
+                return (result['errorCode'], candidates)
         if 'translation' in result:
             for trans in result['translation']:
                 candidates.append(trans)
@@ -257,7 +281,7 @@ class BaiduTranslator(object):
             return (NETWORK_TIMEOUT, candidates)
 
         if 'error_code' in result:
-            return (EMPTY_RESPONSE, candidates)
+            return (result['error_code'], candidates)
 
         if 'trans_result' in result:
             for trans in result['trans_result']:
@@ -312,7 +336,12 @@ def get_json_content(base_url, args):
         opener = req.build_opener(proxy_opener)
 
     url = base_url + urllib.parse.urlencode(args)
-    response = opener.open(url, timeout=1) if opener != None else req.urlopen(url, timeout=1)
+
+    response = None
+    if opener != None:
+        response = opener.open(url, timeout=5)
+    else:
+        response = req.urlopen(url, timeout=5)
 
     data     = response.read()
     encoding = response.info().get_content_charset('utf-8')
