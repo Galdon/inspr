@@ -7,7 +7,6 @@ import sublime
 import sublime_plugin
 import threading
 import urllib
-from socket import timeout
 
 SETTINGS_FILE = 'Inspr.sublime-settings'
 
