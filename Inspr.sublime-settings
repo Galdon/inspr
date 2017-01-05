@@ -11,6 +11,8 @@
 
 	"full_inspiration": true,
 
+	"show_with_monospace_font": true,
+
 	// Support HTTP proxy only
 	"http_proxy": ""
 }

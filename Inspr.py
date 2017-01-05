@@ -46,20 +46,22 @@ LOWER_UNDERSCORES = 'lower_underscores'
 UPPER_UNDERSCORES = 'upper_underscores'
 
 # Settings
-DICTIONARY_SOURCE   = 'dictionary_source'
-CLEAR_SELECTION     = 'clear_selection'
-AUTO_DETECT_WORDS   = 'auto_detect_words'
-SKIP_WORDS          = 'skip_words'
-FULL_INSPIRATION    = 'full_inspiration'
-HTTP_PROXY          = 'http_proxy'
+DICTIONARY_SOURCE        = 'dictionary_source'
+CLEAR_SELECTION          = 'clear_selection'
+AUTO_DETECT_WORDS        = 'auto_detect_words'
+SKIP_WORDS               = 'skip_words'
+FULL_INSPIRATION         = 'full_inspiration'
+SHOW_WITH_MONOSPACE_FONT = 'show_with_monospace_font'
+HTTP_PROXY               = 'http_proxy'
 
 # Default Settings Value
-DEFAULT_DIC_SROUCE          = ['Baidu']
-DEFAULT_CLEAR_SELECTION     = True
-DEFAULT_AUTO_DETECT_WORDS   = True
-DEFAULT_SKIP_WORDS          = ["A", "a", "the", "The"]
-DEFAULT_FULL_INSPIRATION    = False
-DEFAULT_HTTP_PROXY          = ''
+DEFAULT_DIC_SROUCE               = ['Baidu']
+DEFAULT_CLEAR_SELECTION          = True
+DEFAULT_AUTO_DETECT_WORDS        = True
+DEFAULT_SKIP_WORDS               = ["A", "a", "the", "The"]
+DEFAULT_FULL_INSPIRATION         = False
+DEFAULT_SHOW_WITH_MONOSPACE_FONT = True
+DEFAULT_HTTP_PROXY               = ''
 
 DICTIONARY_CACHE = {}
 clear_global_cache = DICTIONARY_CACHE.clear
@@ -150,7 +152,10 @@ class InsprQueryThread(threading.Thread):
 
         if self.translations and cause == OK:
             self.cache_words(cache, word, case_style)
-            self.window.show_quick_panel(self.translations, self.on_done, sublime.MONOSPACE_FONT)
+            if settings.get(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
+                self.window.show_quick_panel(self.translations, self.on_done, sublime.MONOSPACE_FONT)
+            else:
+                self.window.show_quick_panel(self.translations, self.on_done)
         else:
             self.view.show_popup(ERROR_MSG[int(cause)])
 
