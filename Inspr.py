@@ -1,13 +1,13 @@
+import codecs
 import hashlib
 import json
 import random
 import re
+import socket
 import sublime
 import sublime_plugin
 import threading
 import urllib
-import socket
-import codecs
 
 SETTINGS_FILE = 'Inspr.sublime-settings'
 
