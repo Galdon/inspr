@@ -9,8 +9,10 @@
 
 	"skip_words": ["A", "a", "the", "The"],
 
+	// Including web translations
 	"full_inspiration": true,
 
+	// Show monospace font in result
 	"show_with_monospace_font": true,
 
 	// Support HTTP proxy only
