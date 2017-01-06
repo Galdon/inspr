@@ -86,6 +86,14 @@ def to_upper_underscores(string):
     a = to_lower_underscores(string)
     return a.upper()
 
+def ignore_and_filter(string, skip):
+    tokens = string.split()
+    result = []
+    for token in tokens:
+        if token not in skip:
+            result.append(token)
+    return ' '.join(result)
+
 class InsprCommand(sublime_plugin.TextCommand):
 
     def run(self, edit, **args):
@@ -112,8 +120,6 @@ class InsprQueryThread(threading.Thread):
             self.view.run_command("inspr_auto_detect_words")
 
         word = self.view.substr(self.view.sel()[0]).strip()
-        if settings.get(AUTO_DETECT_WORDS, DEFAULT_AUTO_DETECT_WORDS):
-            word = word # detect_nearest_selection(word)
         if len(word) == 0 or word.isspace():
             return
 
@@ -143,7 +149,12 @@ class InsprQueryThread(threading.Thread):
         if OK not in causes:
             cause = causes[0]
 
+        ignore = settings.get(IGNORE_WORDS, DEFAULT_IGNORE_WORDS)
+
         for trans in candidates:
+            # split by space and skip words
+            if ignore:
+                trans = ignore_and_filter(trans, ignore)
             case = style_function(trans)
             self.translations.append(case)
 
