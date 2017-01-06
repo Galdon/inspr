@@ -5,7 +5,7 @@
 	// Clear selection and move cursor to end of words
 	"clear_selection": true,
 
-	"auto_detect_words": false,
+	"auto_detect_words": true,
 
 	"ignore_words": ["A", "a", "the", "The"],
 

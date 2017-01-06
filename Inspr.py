@@ -107,6 +107,10 @@ class InsprQueryThread(threading.Thread):
         case_style     = self.args['case_style'] if 'case_style' in self.args else LOWER_CAMEL_CASE
         style_function = get_corresponding_style_function(case_style)
 
+        sel = self.view.sel()[0]
+        if sel.begin() == sel.end() and settings.get(AUTO_DETECT_WORDS, DEFAULT_AUTO_DETECT_WORDS):
+            self.view.run_command("inspr_auto_detect_words")
+
         word = self.view.substr(self.view.sel()[0]).strip()
         if settings.get(AUTO_DETECT_WORDS, DEFAULT_AUTO_DETECT_WORDS):
             word = word # detect_nearest_selection(word)
@@ -211,6 +215,63 @@ class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
         selection.add(sublime.Region(pt))
 
         view.show(pt)
+
+class InsprAutoDetectWordsCommand(sublime_plugin.TextCommand):
+
+    def run(self, edit):
+
+        view = self.view
+        sel  = view.sel()[0]
+
+        if (sel.begin() != sel.end()):
+            return
+
+        pt = sel.begin()
+        clsfy = view.classify(pt)
+
+        # sublime.CLASS_WORD_START
+        # sublime.CLASS_WORD_END
+        # sublime.CLASS_PUNCTUATION_START
+        # sublime.CLASS_PUNCTUATION_END
+        # sublime.CLASS_SUB_WORD_START
+        # sublime.CLASS_SUB_WORD_END
+        # sublime.CLASS_LINE_START
+        # sublime.CLASS_LINE_END
+        # sublime.CLASS_EMPTY_LINE
+
+        flag = 0
+        offset = 0
+
+        if clsfy & sublime.CLASS_WORD_START != 0:
+            # go right until word end or line end
+            flag = (sublime.CLASS_WORD_END | sublime.CLASS_SUB_WORD_END | sublime.CLASS_LINE_END)
+            offset = 1
+        elif clsfy & sublime.CLASS_WORD_END != 0:
+            # go left until word start or line start
+            flag = (sublime.CLASS_WORD_START | sublime.CLASS_SUB_WORD_START | sublime.CLASS_LINE_START)
+            offset = -1
+        else:
+            return
+
+        _pt    = pt
+        _clsfy = clsfy
+        begin, end = view.rowcol(pt)
+
+        sentinel = 0
+        while _clsfy & flag == 0:
+            if sentinel > 32:
+                return
+            _pt = self.move_cursor_horizontally(_pt, offset)
+            _clsfy = view.classify(_pt)
+            _, end = view.rowcol(_pt)
+            sentinel += 1
+
+        view.sel().clear()
+        view.sel().add(sublime.Region(pt, view.text_point(begin, end)))
+
+    def move_cursor_horizontally(self, pt, offset):
+        row, col = self.view.rowcol(pt)
+        return self.view.text_point(row, col + offset)
 
 class YoudaoTranslator(object):
 
