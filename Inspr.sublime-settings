@@ -5,8 +5,10 @@
 	// Clear selection and move cursor to end of words
 	"clear_selection": true,
 
+	// Auto absorb word and wraped in selection if available
 	"auto_detect_words": true,
 
+	// Skip those words
 	"ignore_words": ["A", "a", "the", "The"],
 
 	// Including web translations
