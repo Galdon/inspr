@@ -49,7 +49,7 @@ UPPER_UNDERSCORES = 'upper_underscores'
 DICTIONARY_SOURCE        = 'dictionary_source'
 CLEAR_SELECTION          = 'clear_selection'
 AUTO_DETECT_WORDS        = 'auto_detect_words'
-SKIP_WORDS               = 'skip_words'
+IGNORE_WORDS             = 'ignore_words'
 FULL_INSPIRATION         = 'full_inspiration'
 SHOW_WITH_MONOSPACE_FONT = 'show_with_monospace_font'
 HTTP_PROXY               = 'http_proxy'
@@ -58,7 +58,7 @@ HTTP_PROXY               = 'http_proxy'
 DEFAULT_DIC_SROUCE               = ['Baidu']
 DEFAULT_CLEAR_SELECTION          = True
 DEFAULT_AUTO_DETECT_WORDS        = True
-DEFAULT_SKIP_WORDS               = ["A", "a", "the", "The"]
+DEFAULT_IGNORE_WORDS             = ["A", "a", "the", "The"]
 DEFAULT_FULL_INSPIRATION         = False
 DEFAULT_SHOW_WITH_MONOSPACE_FONT = True
 DEFAULT_HTTP_PROXY               = ''
@@ -69,7 +69,7 @@ clear_global_cache = DICTIONARY_CACHE.clear
 settings = sublime.load_settings(SETTINGS_FILE)
 settings.add_on_change(DICTIONARY_SOURCE,   clear_global_cache)
 settings.add_on_change(FULL_INSPIRATION,    clear_global_cache)
-settings.add_on_change(SKIP_WORDS,          clear_global_cache)
+settings.add_on_change(IGNORE_WORDS,        clear_global_cache)
 settings.add_on_change(HTTP_PROXY,          clear_global_cache)
 
 def to_lower_camel_case(string):

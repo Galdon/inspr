@@ -7,7 +7,7 @@
 
 	"auto_detect_words": false,
 
-	"skip_words": ["A", "a", "the", "The"],
+	"ignore_words": ["A", "a", "the", "The"],
 
 	// Including web translations
 	"full_inspiration": true,
