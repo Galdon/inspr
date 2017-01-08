@@ -6,6 +6,7 @@ import re
 import sublime
 import sublime_plugin
 import threading
+import types
 import urllib
 
 SETTINGS_FILE = 'Inspr.sublime-settings'
@@ -316,8 +317,8 @@ class YoudaoTranslator(object):
         if 'translation' in result:
             for trans in result['translation']:
                 candidates.append(trans)
+        full_inspr = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
         if 'web' in result:
-            full_inspr = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
             for web in result['web']:
                 strictly_matched = query == web['key']
                 if full_inspr or strictly_matched:
@@ -407,7 +408,7 @@ def get_json_content(base_url, args):
     proxy = settings.get(HTTP_PROXY, DEFAULT_HTTP_PROXY)
 
     opener = None
-    if proxy != '':
+    if proxy != '' and proxy != None:
         proxy_opener = req.ProxyHandler({'http': proxy})
         opener = req.build_opener(proxy_opener)
 
