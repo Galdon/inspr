@@ -414,12 +414,7 @@ def get_json_content(base_url, args):
 
     url = base_url + urllib.parse.urlencode(args)
 
-    response = None
-    if opener != None:
-        response = opener.open(url, timeout=5)
-    else:
-        response = req.urlopen(url, timeout=5)
-
+    response = req.urlopen(url, timeout=5) if opener == None else opener.open(url, timeout=5)
     data     = response.read()
     encoding = response.info().get_content_charset('utf-8')
     result   = json.loads(data.decode(encoding))
