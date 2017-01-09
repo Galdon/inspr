@@ -1,6 +1,6 @@
 {
 	// Source of dictionaries
-	"dictionary_source": ["Microsoft"],
+	"dictionary_source": ["Youdao", "Baidu", "Microsoft"],
 
 	// Clear selection and move cursor to end of words
 	"clear_selection": true,

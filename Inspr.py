@@ -6,6 +6,7 @@ import re
 import sublime
 import sublime_plugin
 import threading
+import time
 import types
 import urllib
 
@@ -38,7 +39,7 @@ ERROR_MSG = {
     58001:           '百度：译文语言方向不支持',
     54004:           '百度：账户余额不足',
     54005:           '百度：长 query 请求频繁，请降低长 query 的发送频率',
-    999:             '微软：token error'
+    999:             '微软：Access Token 错误'
 }
 
 # Case styles
@@ -74,6 +75,19 @@ settings.add_on_change(FULL_INSPIRATION,    clear_global_cache)
 settings.add_on_change(IGNORE_WORDS,        clear_global_cache)
 settings.add_on_change(HTTP_PROXY,          clear_global_cache)
 
+def reload_settings():
+    settings = sublime.load_settings(SETTINGS_FILE)
+
+def get_settings(name, default=None):
+    v = settings.get(name)
+    if v == None:
+        try:
+            return sublime.active_window().active_view().settings().get(name, default)
+        except AttributeError:
+            return default
+    else:
+        return v
+
 def to_lower_camel_case(string):
     s = to_upper_camel_case(string)
     return ''.join(word[0].lower() + word[1:] for word in s.split())
@@ -96,9 +110,57 @@ def ignore_and_filter(string, skip):
             result.append(token)
     return ' '.join(result)
 
+def get_corresponding_style_function(case_style):
+    mapper = style_functions
+    return mapper[case_style] if case_style in mapper else to_lower_camel_case
+
+def get_json(url, args, method):
+    error_code, result = get_response(url, args, method)
+    return error_code, json.loads(result)
+
+def get_response(url, args, method):
+
+    req = urllib.request
+
+    if method != 'GET' and method != 'POST':
+        return ''
+
+    proxy = get_settings(HTTP_PROXY, DEFAULT_HTTP_PROXY)
+
+    opener = None
+    if proxy != '' and proxy != None:
+        proxy_opener = req.ProxyHandler({'http': proxy})
+        opener = req.build_opener(proxy_opener)
+
+    resp = None
+    timeout = 10
+
+    try:
+        if method == 'GET':
+            url = url + urllib.parse.urlencode(args)
+            resp = req.urlopen(url, timeout=timeout) if opener == None else opener.open(url, timeout=timeout)
+        else:
+            postdata = urllib.parse.urlencode(args)
+            postdata = postdata.encode('utf-8')
+            _req = req.Request(url=url, data=postdata)
+            resp = req.urlopen(_req, timeout=timeout) if opener == None else opener.open(_req, timeout=timeout)
+    except urllib.error.URLError as e:
+        print(e)
+        return OK, ''
+    except socket.timeout as e:
+        return NETWORK_TIMEOUT, ''
+
+    data     = resp.read()
+    encoding = resp.info().get_content_charset('utf-8')
+
+    resp.close()
+
+    return OK, data.decode(encoding)
+
 class InsprCommand(sublime_plugin.TextCommand):
 
     def run(self, edit, **args):
+        reload_settings()
         InsprQueryThread(edit, self.view, **args).start()
 
 class InsprQueryThread(threading.Thread):
@@ -118,7 +180,7 @@ class InsprQueryThread(threading.Thread):
         style_function = get_corresponding_style_function(case_style)
 
         sel = self.view.sel()[0]
-        if sel.begin() == sel.end() and settings.get(AUTO_DETECT_WORDS, DEFAULT_AUTO_DETECT_WORDS):
+        if sel.begin() == sel.end() and get_settings(AUTO_DETECT_WORDS, DEFAULT_AUTO_DETECT_WORDS):
             self.view.run_command("inspr_auto_detect_words")
 
         word = self.view.substr(self.view.sel()[0]).strip()
@@ -129,7 +191,7 @@ class InsprQueryThread(threading.Thread):
 
         # if cache hit
         if self.is_cache_hit(cache, word, case_style):
-            self.translations += cache[word][case_style]
+            self.translations.extend(cache[word][case_style])
             self.window.show_quick_panel(self.translations, self.on_done)
             return
 
@@ -137,7 +199,7 @@ class InsprQueryThread(threading.Thread):
         cause = 0
         causes = []
         candidates = []
-        dic_source = settings.get(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
+        dic_source = get_settings(DICTIONARY_SOURCE, DEFAULT_DIC_SROUCE)
 
         if dic_source == None:
             dic_source = DEFAULT_DIC_SROUCE
@@ -146,12 +208,12 @@ class InsprQueryThread(threading.Thread):
             if dic in translator_map:
                 (c, candidate) = translator_map[dic].translate(word)
                 causes.append(c)
-                candidates += candidate
+                candidates.extend(candidate)
 
         if OK not in causes:
             cause = causes[0]
 
-        ignore = settings.get(IGNORE_WORDS, DEFAULT_IGNORE_WORDS)
+        ignore = get_settings(IGNORE_WORDS, DEFAULT_IGNORE_WORDS)
 
         for trans in candidates:
             # split by space and skip words
@@ -169,7 +231,7 @@ class InsprQueryThread(threading.Thread):
 
         if self.translations and cause == OK:
             self.cache_words(cache, word, case_style)
-            if settings.get(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
+            if get_settings(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
                 self.window.show_quick_panel(self.translations, self.on_done, sublime.MONOSPACE_FONT)
             else:
                 self.window.show_quick_panel(self.translations, self.on_done)
@@ -218,7 +280,7 @@ class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
         view.replace(edit, selection[0], translation)
 
-        clear_sel = settings.get(CLEAR_SELECTION, DEFAULT_CLEAR_SELECTION)
+        clear_sel = get_settings(CLEAR_SELECTION, DEFAULT_CLEAR_SELECTION)
         if not clear_sel:
             return
 
@@ -307,10 +369,9 @@ class YoudaoTranslator(object):
         result = {}
         candidates = []
 
-        try:
-            result = get_json_content(self.URL, self.ARGS)
-        except urllib.error.URLError:
-            return (NETWORK_TIMEOUT, candidates)
+        error_code, result = get_json(self.URL, self.ARGS, 'GET')
+        if error_code != OK:
+            return (error_code, candidates)
 
         if 'errorCode' in result:
             if result['errorCode'] != 0:
@@ -318,7 +379,7 @@ class YoudaoTranslator(object):
         if 'translation' in result:
             for trans in result['translation']:
                 candidates.append(trans)
-        full_inspr = settings.get(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
+        full_inspr = get_settings(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
         if 'web' in result:
             for web in result['web']:
                 strictly_matched = query == web['key']
@@ -353,10 +414,9 @@ class BaiduTranslator(object):
         result = {}
         candidates = []
 
-        try:
-            result = get_json_content(self.URL, self.ARGS)
-        except urllib.error.URLError:
-            return (NETWORK_TIMEOUT, candidates)
+        error_code, result = get_json(self.URL, self.ARGS, 'GET')
+        if error_code != OK:
+            return (error_code, candidates)
 
         if 'error_code' in result:
             return (result['error_code'], candidates)
@@ -384,7 +444,7 @@ class MicrosoftTranslator():
     SCOPE         = 'http://api.microsofttranslator.com'
     GRANT_TYPE    = 'client_credentials'
     OAUTH_URL     = 'https://datamarket.accesscontrol.windows.net/v2/OAuth2-13'
-    URL           = 'http://api.microsofttranslator.com/v2/Http.svc/Translate'
+    URL           = 'http://api.microsofttranslator.com/v2/Http.svc/Translate?'
     ARGS = {
         'client_id':     CLIENT_ID,
         'client_secret': CLIENT_SECRET,
@@ -392,55 +452,70 @@ class MicrosoftTranslator():
         'grant_type':    GRANT_TYPE
     }
 
+    def __init__(self):
+        self.token_last_aquired = 0
+        self.token_expires_in = 0
+        self.token = ''
+        MicrosoftTranslatorGetTokenThread(self).start()
+
     def translate(self, query):
 
-        result = {}
         candidates = []
 
-        try:
-            # test if token error
-            token = self.get_token()
-        except urllib.error.URLError:
-            return (NETWORK_TIMEOUT, candidates)
+        error_code = self.get_latest_token()
+        if error_code != OK:
+            return (error_code, candidates)
 
-        # # https://github.com/MicrosoftTranslator/PythonConsole/blob/master/MTPythonSampleCode/MTPythonSampleCode.py
-        if token == None or token == '':
+        # https://github.com/MicrosoftTranslator/PythonConsole/blob/master/MTPythonSampleCode/MTPythonSampleCode.py
+        if self.token == None or self.token == '':
             return (999, candidates)
 
-        from_lang   = 'cn'
+        from_lang   = 'zh-CHS'
         to_lang     = 'en'
 
         # Call Microsoft Translator service
         headers = {
-            'appId': token,
+            'appId': self.token,
             'text': query,
             'to': to_lang
         }
-        result = get_json_content_post(self.URL, headers)
-        print('result --->')
-        print(result)
+
+        # <string xmlns="http://schemas.microsoft.com/2003/10/Serialization/">%s</string>
+        error_code, translation = get_response(self.URL, headers, 'GET')
+        if error_code != OK:
+            return (error_code, candidates)
+
+        candidates.extend(re.findall(r"<string.*>(.*)</string>", translation))
 
         return (OK, candidates)
 
-    def get_token(self):
+    def get_latest_token(self):
 
-        access_token = ''
-        postdata = urllib.parse.urlencode(self.ARGS)
-        postdata = postdata.encode('utf-8')
-        req = urllib.request.Request(url=self.OAUTH_URL, data=postdata)
+        if not self.is_access_token_expired():
+            return OK
 
-        try:
-            url = self.OAUTH_URL
-            oauth_res = urllib.request.urlopen(req, timeout=5)
-            data     = oauth_res.read()
-            encoding = oauth_res.info().get_content_charset('utf-8')
-            result   = json.loads(data.decode(encoding))
-            access_token = 'Bearer %s' % result['access_token']
-        except OSError:
-            pass
+        error_code, oauth_token = get_json(self.OAUTH_URL, self.ARGS, 'POST')
+        if error_code != OK:
+            return erro_code
 
-        return access_token
+        self.token              = 'Bearer %s' % oauth_token['access_token'] if 'access_token' in oauth_token else ''
+        self.token_expires_in   = int(oauth_token['expires_in']) if 'expires_in' in oauth_token else 0
+        self.token_last_aquired = int(time.time()) if self.token != '' else 0
 
+        return OK
+
+    def is_access_token_expired(self):
+        return self.token == '' \
+            or self.token_last_aquired + self.token_expires_in < int(time.time())
+
+class MicrosoftTranslatorGetTokenThread(threading.Thread):
+
+    def __init__(self, translator):
+        self.translator = translator
+        threading.Thread.__init__(self)
+
+    def run(self):
+        self.translator.get_latest_token()
 
 # Youdao source
 youdao_client = YoudaoTranslator()
@@ -465,54 +540,3 @@ translator_map = {
     'Baidu':  baidu_client,
     'Microsoft': microsoft_client
 }
-
-def get_corresponding_style_function(case_style):
-    mapper = style_functions
-    return mapper[case_style] if case_style in mapper else to_lower_camel_case
-
-def get_json_content(base_url, args):
-
-    req = urllib.request
-
-    # set proxy
-    proxy = settings.get(HTTP_PROXY, DEFAULT_HTTP_PROXY)
-
-    opener = None
-    if proxy != '' and proxy != None:
-        proxy_opener = req.ProxyHandler({'http': proxy})
-        opener = req.build_opener(proxy_opener)
-
-    url = base_url + urllib.parse.urlencode(args)
-
-    response = req.urlopen(url, timeout=5) if opener == None else opener.open(url, timeout=5)
-    data     = response.read()
-    encoding = response.info().get_content_charset('utf-8')
-    result   = json.loads(data.decode(encoding))
-
-    response.close()
-
-    return result
-
-def get_json_content_post(base_url, args):
-
-    req = urllib.request
-
-    # set proxy
-    proxy = settings.get(HTTP_PROXY, DEFAULT_HTTP_PROXY)
-
-    opener = None
-    if proxy != '' and proxy != None:
-        print('proxy not none')
-        print(proxy)
-        proxy_opener = req.ProxyHandler({'http': proxy})
-        opener = req.build_opener(proxy_opener)
-
-    response = req.urlopen(base_url, data=args, timeout=5) if opener == None else opener.open(url, data=args, timeout=5)
-    data     = response.read()
-    encoding = response.info().get_content_charset('utf-8')
-    result   = json.loads(data.decode(encoding))
-    print(result)
-
-    response.close()
-
-    return result
