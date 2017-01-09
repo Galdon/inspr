@@ -3,6 +3,7 @@ import hashlib
 import json
 import random
 import re
+import socket
 import sublime
 import sublime_plugin
 import threading
@@ -226,7 +227,7 @@ class InsprQueryThread(threading.Thread):
             return re.match('[0-9a-zA-Z_]+', string) != None
 
         for idx, val in enumerate(self.translations):
-            self.translations[idx] = re.sub('[-.:/,]', '', val)
+            self.translations[idx] = re.sub('[-.:\'/,]', '', val)
         self.translations = sorted(filter(isidentifier, set(self.translations)))
 
         if self.translations and cause == OK:
@@ -235,6 +236,8 @@ class InsprQueryThread(threading.Thread):
                 self.window.show_quick_panel(self.translations, self.on_done, sublime.MONOSPACE_FONT)
             else:
                 self.window.show_quick_panel(self.translations, self.on_done)
+        elif len(self.translations) == 0:
+            self.view.show_popup(ERROR_MSG[EMPTY_RESPONSE])
         else:
             self.view.show_popup(ERROR_MSG[int(cause)])
 
