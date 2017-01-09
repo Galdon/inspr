@@ -37,7 +37,8 @@ ERROR_MSG = {
     54003:           '百度：访问频率受限，请降低调用频率',
     58001:           '百度：译文语言方向不支持',
     54004:           '百度：账户余额不足',
-    54005:           '百度：长 query 请求频繁，请降低长 query 的发送频率'
+    54005:           '百度：长 query 请求频繁，请降低长 query 的发送频率',
+    999:             '微软：token error'
 }
 
 # Case styles
@@ -376,11 +377,79 @@ class BaiduTranslator(object):
         sign = md5.hexdigest()
         return sign
 
+class MicrosoftTranslator():
+
+    CLIENT_ID     = 'inspr'
+    CLIENT_SECRET = 'awhg2KcdFKnwhylSNYeZIrKGhdIGv2g63YrSjOSo'
+    SCOPE         = 'http://api.microsofttranslator.com'
+    GRANT_TYPE    = 'client_credentials'
+    OAUTH_URL     = 'https://datamarket.accesscontrol.windows.net/v2/OAuth2-13'
+    URL           = 'http://api.microsofttranslator.com/v2/Http.svc/Translate'
+    ARGS = {
+        'client_id':     CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+        'scope':         SCOPE,
+        'grant_type':    GRANT_TYPE
+    }
+
+    def translate(self, query):
+
+        result = {}
+        candidates = []
+
+        try:
+            # test if token error
+            token = self.get_token()
+        except urllib.error.URLError:
+            return (NETWORK_TIMEOUT, candidates)
+
+        # # https://github.com/MicrosoftTranslator/PythonConsole/blob/master/MTPythonSampleCode/MTPythonSampleCode.py
+        if token == None or token == '':
+            return (999, candidates)
+
+        from_lang   = 'cn'
+        to_lang     = 'en'
+
+        # Call Microsoft Translator service
+        headers = {
+            'appId': token,
+            'text': query,
+            'to': to_lang
+        }
+        result = get_json_content_post(self.URL, headers)
+        print('result --->')
+        print(result)
+
+        return (OK, candidates)
+
+    def get_token(self):
+
+        access_token = ''
+        postdata = urllib.parse.urlencode(self.ARGS)
+        postdata = postdata.encode('utf-8')
+        req = urllib.request.Request(url=self.OAUTH_URL, data=postdata)
+
+        try:
+            url = self.OAUTH_URL
+            oauth_res = urllib.request.urlopen(req, timeout=5)
+            data     = oauth_res.read()
+            encoding = oauth_res.info().get_content_charset('utf-8')
+            result   = json.loads(data.decode(encoding))
+            access_token = 'Bearer %s' % result['access_token']
+        except OSError:
+            pass
+
+        return access_token
+
+
 # Youdao source
 youdao_client = YoudaoTranslator()
 
 # Baidu source
 baidu_client  = BaiduTranslator()
+
+# Microsoft source
+microsoft_client = MicrosoftTranslator()
 
 # Style fuction map
 style_functions = {
@@ -393,7 +462,8 @@ style_functions = {
 # Translator client map
 translator_map = {
     'Youdao': youdao_client,
-    'Baidu':  baidu_client
+    'Baidu':  baidu_client,
+    'Microsoft': microsoft_client
 }
 
 def get_corresponding_style_function(case_style):
@@ -418,6 +488,30 @@ def get_json_content(base_url, args):
     data     = response.read()
     encoding = response.info().get_content_charset('utf-8')
     result   = json.loads(data.decode(encoding))
+
+    response.close()
+
+    return result
+
+def get_json_content_post(base_url, args):
+
+    req = urllib.request
+
+    # set proxy
+    proxy = settings.get(HTTP_PROXY, DEFAULT_HTTP_PROXY)
+
+    opener = None
+    if proxy != '' and proxy != None:
+        print('proxy not none')
+        print(proxy)
+        proxy_opener = req.ProxyHandler({'http': proxy})
+        opener = req.build_opener(proxy_opener)
+
+    response = req.urlopen(base_url, data=args, timeout=5) if opener == None else opener.open(url, data=args, timeout=5)
+    data     = response.read()
+    encoding = response.info().get_content_charset('utf-8')
+    result   = json.loads(data.decode(encoding))
+    print(result)
 
     response.close()
 
