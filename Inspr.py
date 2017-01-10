@@ -556,6 +556,24 @@ MT_TOKEN_LAST_ACCQUIRED = 0
 MT_TOKEN_EXPIRES_IN = 0
 MT_TOKEN_CACHE = ''
 
+def accquire_latest_microsoft_translator_access_token():
+
+    if not is_microsoft_translator_access_token_expired():
+        return
+
+    oauth_token = ''
+
+    if not oauth_token:
+        return
+
+    MT_TOKEN_CACHE          = 'Bearer %s' % oauth_token['access_token'] if 'access_token' in oauth_token else ''
+    MT_TOKEN_EXPIRES_IN     = int(oauth_token['expires_in']) if 'expires_in' in oauth_token else 0
+    MT_TOKEN_LAST_ACCQUIRED = int(time.time()) if self.token != '' else 0
+
+def is_microsoft_translator_access_token_expired():
+    return MT_TOKEN_CACHE == '' \
+        or MT_TOKEN_LAST_ACCQUIRED + MT_TOKEN_EXPIRES_IN * 0.75 < int(time.time())
+
 class MicrosoftTranslatorThread(TranslatorThread):
 
     CLIENT_ID     = 'inspr'
@@ -619,10 +637,6 @@ class MicrosoftTranslatorThread(TranslatorThread):
         self.token_last_aquired = int(time.time()) if self.token != '' else 0
 
         return OK
-
-    def is_access_token_expired(self):
-        return self.token == '' \
-            or self.token_last_aquired + self.token_expires_in < int(time.time())
 
 # Youdao source
 youdao_client = YoudaoTranslator()
