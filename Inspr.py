@@ -347,7 +347,118 @@ class InsprAutoDetectWordsCommand(sublime_plugin.TextCommand):
         row, col = self.view.rowcol(pt)
         return self.view.text_point(row, col + offset)
 
-class YoudaoTranslator(object):
+class MicrosoftTranslator():
+
+    def __init__(self):
+        self.token_last_aquired = 0
+        self.token_expires_in = 0
+        self.token = ''
+        MicrosoftTranslatorGetTokenThread(self).start()
+
+    def translate(self, query):
+
+        candidates = []
+
+        error_code = self.get_latest_token()
+        if error_code != OK:
+            return (error_code, candidates)
+
+        # https://github.com/MicrosoftTranslator/PythonConsole/blob/master/MTPythonSampleCode/MTPythonSampleCode.py
+        if self.token == None or self.token == '':
+            return (999, candidates)
+
+        from_lang   = 'zh-CHS'
+        to_lang     = 'en'
+
+        # Call Microsoft Translator service
+        headers = {
+            'appId': self.token,
+            'text': query,
+            'to': to_lang
+        }
+
+        # <string xmlns="http://schemas.microsoft.com/2003/10/Serialization/">%s</string>
+        error_code, translation = get_response(self.URL, headers, 'GET')
+        if error_code != OK:
+            return (error_code, candidates)
+
+        candidates.extend(re.findall(r"<string.*>(.*)</string>", translation))
+
+        return (OK, candidates)
+
+
+
+class MicrosoftTranslatorGetTokenThread(threading.Thread):
+
+    def __init__(self, translator):
+        self.translator = translator
+        threading.Thread.__init__(self)
+
+    def run(self):
+        self.translator.get_latest_token()
+
+class TranslatorThread(threading.Thread):
+
+    def __init__(self, query, full_inspiration=True, proxy=''):
+        self.query = query
+        self.full_inspiration = full_inspiration
+        self.proxy = proxy
+        self.status = OK
+        self.translations = []
+        threading.Thread.__init__(self)
+
+    def run():
+        self.status, self.translations = self.translate()
+
+    def translate(self):
+        # Query by given text and return result as a list
+        return []
+
+    def get_http_response(self, url, args, method='GET', timeout=10, proxy=''):
+
+        req    = urllib.request
+        opener = None
+
+        if not proxy:
+            proxy_opener = req.ProxyHandler({'http': proxy})
+            opener = req.build_opener(proxy_opener)
+
+        resp = None
+        open_fuc = req.urlopen if opener == None else opener.open
+
+        try:
+            if method == 'GET':
+                url += urllib.parse.urlencode(args)
+                resp = opener_func(url, timeout=timeout)
+            else:
+                postdata = urllib.parse.urlencode(args).encode('utf-8')
+                resp = opener_func(req.Request(url=url, data=postdata), timeout=timeout)
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, socket.timeout):
+                return NETWORK_TIMEOUT, ''
+            else:
+                # Raise the original error
+                print(e)
+                raise
+
+        encoding = resp.info().get_content_charset('utf-8')
+        resp.close()
+
+        return OK, resp.read().decode(encoding)
+
+    def get_json(url, args, method='GET', timeout=10, proxy=''):
+        error_code, result = self.get_http_response(url, args, method, timeout, proxy)
+        json_result = {}
+        try:
+            json_result = json.loads(result)
+        except:
+            print('JSON parse error: %s' % result)
+        return error_code, json_result
+
+    def get_translations():
+        return self.status, self.translations
+
+class YoudaoTranslatorThread(TranslatorThread):
 
     KEY      = '672847864'
     KEY_FROM = 'InsprMe'
@@ -361,14 +472,17 @@ class YoudaoTranslator(object):
         'q':       ''
     }
 
-    def translate(self, query):
+    def __init__(self, query, full_inspiration=True, proxy=''):
+        TranslatorThread.__init__(self)
 
-        self.ARGS['q'] = query.encode('utf-8')
+    def translate(self):
+
+        self.ARGS['q'] = self.query.encode('utf-8')
 
         result = {}
         candidates = []
 
-        error_code, result = get_json(self.URL, self.ARGS, 'GET')
+        error_code, result = self.get_json(self.URL, self.ARGS, proxy=self.proxy)
         if error_code != OK:
             return (error_code, candidates)
 
@@ -378,17 +492,16 @@ class YoudaoTranslator(object):
         if 'translation' in result:
             for trans in result['translation']:
                 candidates.append(trans)
-        full_inspr = get_settings(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
         if 'web' in result:
             for web in result['web']:
                 strictly_matched = query == web['key']
-                if full_inspr or strictly_matched:
+                if self.full_inspiration or strictly_matched:
                     for trans in web['value']:
                         candidates.append(trans)
 
         return (OK, candidates)
 
-class BaiduTranslator(object):
+class BaiduTranslatorThread(TranslatorThread):
 
     APP_ID     = '20161205000033482'
     SECRET_KEY = 'bFPDI4jI5jI61S7VpyLR'
@@ -402,18 +515,21 @@ class BaiduTranslator(object):
         'q':     ''
     }
 
-    def translate(self, query):
+    def __init__(self, query, full_inspiration=True, proxy=''):
+        TranslatorThread.__init__(self)
+
+    def translate(self):
 
         salt = self.rand()
 
         self.ARGS['salt'] = salt
-        self.ARGS['sign'] = self.get_sign(salt, query)
-        self.ARGS['q']    = query
+        self.ARGS['sign'] = self.get_sign(salt)
+        self.ARGS['q']    = self.query
 
         result = {}
         candidates = []
 
-        error_code, result = get_json(self.URL, self.ARGS, 'GET')
+        error_code, result = get_json(self.URL, self.ARGS, proxy=self.proxy)
         if error_code != OK:
             return (error_code, candidates)
 
@@ -429,14 +545,18 @@ class BaiduTranslator(object):
     def rand(self):
         return random.randint(32768, 65536)
 
-    def get_sign(self, salt, query):
-        sign = self.APP_ID + query + str(salt) + self.SECRET_KEY
+    def get_sign(self, salt):
+        sign = self.APP_ID + self.query + str(salt) + self.SECRET_KEY
         md5  = hashlib.md5()
         md5.update(sign.encode('utf-8'))
         sign = md5.hexdigest()
         return sign
 
-class MicrosoftTranslator():
+MT_TOKEN_LAST_ACCQUIRED = 0
+MT_TOKEN_EXPIRES_IN = 0
+MT_TOKEN_CACHE = ''
+
+class MicrosoftTranslatorThread(TranslatorThread):
 
     CLIENT_ID     = 'inspr'
     CLIENT_SECRET = 'awhg2KcdFKnwhylSNYeZIrKGhdIGv2g63YrSjOSo'
@@ -451,13 +571,10 @@ class MicrosoftTranslator():
         'grant_type':    GRANT_TYPE
     }
 
-    def __init__(self):
-        self.token_last_aquired = 0
-        self.token_expires_in = 0
-        self.token = ''
-        MicrosoftTranslatorGetTokenThread(self).start()
+    def __init__(self, query, full_inspiration=True, proxy=''):
+        TranslatorThread.__init__(self)
 
-    def translate(self, query):
+    def translate(self):
 
         candidates = []
 
@@ -506,15 +623,6 @@ class MicrosoftTranslator():
     def is_access_token_expired(self):
         return self.token == '' \
             or self.token_last_aquired + self.token_expires_in < int(time.time())
-
-class MicrosoftTranslatorGetTokenThread(threading.Thread):
-
-    def __init__(self, translator):
-        self.translator = translator
-        threading.Thread.__init__(self)
-
-    def run(self):
-        self.translator.get_latest_token()
 
 # Youdao source
 youdao_client = YoudaoTranslator()
