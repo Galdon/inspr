@@ -70,16 +70,8 @@ DEFAULT_HTTP_PROXY               = ''
 DICTIONARY_CACHE = {}
 clear_global_cache = DICTIONARY_CACHE.clear
 
-settings = sublime.load_settings(SETTINGS_FILE)
-settings.add_on_change(DICTIONARY_SOURCE,   clear_global_cache)
-settings.add_on_change(FULL_INSPIRATION,    clear_global_cache)
-settings.add_on_change(IGNORE_WORDS,        clear_global_cache)
-settings.add_on_change(HTTP_PROXY,          clear_global_cache)
-
-def reload_settings():
-    settings = sublime.load_settings(SETTINGS_FILE)
-
 def get_settings(name, default=None):
+    settings = sublime.load_settings(SETTINGS_FILE)
     v = settings.get(name)
     if v == None:
         try:
@@ -117,7 +109,12 @@ def get_corresponding_style_function(case_style):
 
 def get_json(url, args, method):
     error_code, result = get_response(url, args, method)
-    return error_code, json.loads(result)
+    json_result = {}
+    try:
+        json_result = json.loads(result)
+    except:
+        print('JSON parse error: %s' % result)
+    return error_code, json_result
 
 def get_response(url, args, method):
 
@@ -161,7 +158,6 @@ def get_response(url, args, method):
 class InsprCommand(sublime_plugin.TextCommand):
 
     def run(self, edit, **args):
-        reload_settings()
         InsprQueryThread(edit, self.view, **args).start()
 
 class InsprQueryThread(threading.Thread):
@@ -499,7 +495,7 @@ class MicrosoftTranslator():
 
         error_code, oauth_token = get_json(self.OAUTH_URL, self.ARGS, 'POST')
         if error_code != OK:
-            return erro_code
+            return error_code
 
         self.token              = 'Bearer %s' % oauth_token['access_token'] if 'access_token' in oauth_token else ''
         self.token_expires_in   = int(oauth_token['expires_in']) if 'expires_in' in oauth_token else 0
