@@ -11,6 +11,7 @@ import time
 import types
 import urllib
 
+# Settings file for Inspr
 SETTINGS_FILE = 'Inspr.sublime-settings'
 
 MAXIMUM_QUERY_CHARS = 64
@@ -95,7 +96,7 @@ def to_upper_underscores(string):
     a = to_lower_underscores(string)
     return a.upper()
 
-def ignore_and_filter(string, skip):
+def filter_ignored(string, skip):
     tokens = string.split()
     result = []
     for token in tokens:
@@ -107,70 +108,27 @@ def get_corresponding_style_function(case_style):
     mapper = style_functions
     return mapper[case_style] if case_style in mapper else to_lower_camel_case
 
-def get_json(url, args, method):
-    error_code, result = get_response(url, args, method)
-    json_result = {}
-    try:
-        json_result = json.loads(result)
-    except:
-        print('JSON parse error: %s' % result)
-    return error_code, json_result
-
-def get_response(url, args, method):
-
-    req = urllib.request
-
-    if method != 'GET' and method != 'POST':
-        return ''
-
-    proxy = get_settings(HTTP_PROXY, DEFAULT_HTTP_PROXY)
-
-    opener = None
-    if proxy != '' and proxy != None:
-        proxy_opener = req.ProxyHandler({'http': proxy})
-        opener = req.build_opener(proxy_opener)
-
-    resp = None
-    timeout = 10
-
-    try:
-        if method == 'GET':
-            url = url + urllib.parse.urlencode(args)
-            resp = req.urlopen(url, timeout=timeout) if opener == None else opener.open(url, timeout=timeout)
-        else:
-            postdata = urllib.parse.urlencode(args)
-            postdata = postdata.encode('utf-8')
-            _req = req.Request(url=url, data=postdata)
-            resp = req.urlopen(_req, timeout=timeout) if opener == None else opener.open(_req, timeout=timeout)
-    except urllib.error.URLError as e:
-        print(e)
-        return OK, ''
-    except socket.timeout as e:
-        return NETWORK_TIMEOUT, ''
-
-    data     = resp.read()
-    encoding = resp.info().get_content_charset('utf-8')
-
-    resp.close()
-
-    return OK, data.decode(encoding)
-
 class InsprCommand(sublime_plugin.TextCommand):
 
+    translations = []
+    args = None
+
     def run(self, edit, **args):
-        InsprQueryThread(edit, self.view, **args).start()
+        self.translations.clear()
+        self.args = args
+        sublime.set_timeout_async(self.query, 0)
 
-class InsprQueryThread(threading.Thread):
+    def query(self):
 
-    def __init__(self, edit, view, **args):
-        self.edit         = edit
-        self.view         = view
-        self.window       = view.window()
-        self.translations = []
-        self.args         = args
-        threading.Thread.__init__(self)
+        # self.edit         = edit
+        # self.view         = view
+        # self.window       = view.window()
+        # self.translations = []
+        # self.args         = args
+        # threading.Thread.__init__(self)
 
-    def run(self):
+        translations = self.translations
+        window = self.view.window()
 
         cache = DICTIONARY_CACHE
         case_style     = self.args['case_style'] if 'case_style' in self.args else LOWER_CAMEL_CASE
@@ -184,12 +142,12 @@ class InsprQueryThread(threading.Thread):
         if len(word) == 0 or word.isspace():
             return
 
-        self.window.status_message('Search for: ' + word + '...')
+        window.status_message('Search for: %s ...' % word)
 
         # if cache hit
         if self.is_cache_hit(cache, word, case_style):
-            self.translations.extend(cache[word][case_style])
-            self.window.show_quick_panel(self.translations, self.on_done)
+            translations.extend(cache[word][case_style])
+            self.show_translations(translations)
             return
 
         # select source
@@ -201,11 +159,13 @@ class InsprQueryThread(threading.Thread):
         if dic_source == None:
             dic_source = DEFAULT_DIC_SROUCE
 
-        for dic in dic_source:
-            if dic in translator_map:
-                (c, candidate) = translator_map[dic].translate(word)
-                causes.append(c)
-                candidates.extend(candidate)
+        pool = self.start_translate_and_join(dic_source, word)
+        for thread in pool:
+            thread.join()
+        for thread in pool:
+            (c, candidate) = thread.get_translations()
+            causes.append(c)
+            candidates.extend(candidate)
 
         if OK not in causes:
             cause = causes[0]
@@ -215,27 +175,50 @@ class InsprQueryThread(threading.Thread):
         for trans in candidates:
             # split by space and skip words
             if ignore:
-                trans = ignore_and_filter(trans, ignore)
+                trans = filter_ignored(trans, ignore)
             case = style_function(trans)
-            self.translations.append(case)
+            translations.append(case)
 
         def isidentifier(string):
             return re.match('[0-9a-zA-Z_]+', string) != None
 
-        for idx, val in enumerate(self.translations):
-            self.translations[idx] = re.sub('[-.:\'/,]', '', val)
-        self.translations = sorted(filter(isidentifier, set(self.translations)))
+        for idx, val in enumerate(translations):
+            translations[idx] = re.sub('[-.:\'!?/,]', '', val)
+        self.translations = translations = sorted(filter(isidentifier, set(translations)))
 
-        if self.translations and cause == OK:
+        if translations and cause == OK:
             self.cache_words(cache, word, case_style)
-            if get_settings(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
-                self.window.show_quick_panel(self.translations, self.on_done, sublime.MONOSPACE_FONT)
-            else:
-                self.window.show_quick_panel(self.translations, self.on_done)
-        elif len(self.translations) == 0:
+            self.show_translations(translations)
+            window.status_message('Search for: %s ... Done' % word)
+        elif len(translations) == 0:
             self.view.show_popup(ERROR_MSG[EMPTY_RESPONSE])
         else:
             self.view.show_popup(ERROR_MSG[int(cause)])
+
+    def show_translations(self, translations):
+        window = self.view.window()
+        if get_settings(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
+            window.show_quick_panel(translations, self.on_done, sublime.MONOSPACE_FONT)
+        else:
+            window.show_quick_panel(translations, self.on_done)
+
+    def start_translate_and_join(self, dic_source, word):
+        full_inspiration = get_settings(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
+        proxy = get_settings(HTTP_PROXY, DEFAULT_HTTP_PROXY)
+        pool = []
+        for dic in dic_source:
+            create_thread = None
+            if dic == 'Youdao':
+                create_thread = YoudaoTranslatorThread
+            elif dic == 'Baidu':
+                create_thread = BaiduTranslatorThread
+            elif dic == 'Microsoft':
+                create_thread = MicrosoftTranslatorThread
+            if create_thread:
+                thread = create_thread(word, full_inspiration = full_inspiration, proxy = proxy)
+                pool.append(thread)
+                thread.start()
+        return pool
 
     def cache_words(self, cache, word, case_style):
 
@@ -248,7 +231,7 @@ class InsprQueryThread(threading.Thread):
         if case_style not in cache[word]:
             cache[word][case_style] = []
 
-        cache[word][case_style] = self.translations
+        cache[word][case_style] = list(self.translations)
 
     def is_cache_hit(self, cache, word, case_style):
         return word in cache and case_style in cache[word]
@@ -347,56 +330,6 @@ class InsprAutoDetectWordsCommand(sublime_plugin.TextCommand):
         row, col = self.view.rowcol(pt)
         return self.view.text_point(row, col + offset)
 
-class MicrosoftTranslator():
-
-    def __init__(self):
-        self.token_last_aquired = 0
-        self.token_expires_in = 0
-        self.token = ''
-        MicrosoftTranslatorGetTokenThread(self).start()
-
-    def translate(self, query):
-
-        candidates = []
-
-        error_code = self.get_latest_token()
-        if error_code != OK:
-            return (error_code, candidates)
-
-        # https://github.com/MicrosoftTranslator/PythonConsole/blob/master/MTPythonSampleCode/MTPythonSampleCode.py
-        if self.token == None or self.token == '':
-            return (999, candidates)
-
-        from_lang   = 'zh-CHS'
-        to_lang     = 'en'
-
-        # Call Microsoft Translator service
-        headers = {
-            'appId': self.token,
-            'text': query,
-            'to': to_lang
-        }
-
-        # <string xmlns="http://schemas.microsoft.com/2003/10/Serialization/">%s</string>
-        error_code, translation = get_response(self.URL, headers, 'GET')
-        if error_code != OK:
-            return (error_code, candidates)
-
-        candidates.extend(re.findall(r"<string.*>(.*)</string>", translation))
-
-        return (OK, candidates)
-
-
-
-class MicrosoftTranslatorGetTokenThread(threading.Thread):
-
-    def __init__(self, translator):
-        self.translator = translator
-        threading.Thread.__init__(self)
-
-    def run(self):
-        self.translator.get_latest_token()
-
 class TranslatorThread(threading.Thread):
 
     def __init__(self, query, full_inspiration=True, proxy=''):
@@ -407,24 +340,25 @@ class TranslatorThread(threading.Thread):
         self.translations = []
         threading.Thread.__init__(self)
 
-    def run():
+    def run(self):
         self.status, self.translations = self.translate()
 
     def translate(self):
         # Query by given text and return result as a list
         return []
 
-    def get_http_response(self, url, args, method='GET', timeout=10, proxy=''):
+    @staticmethod
+    def get_http_response(url, args, method='GET', timeout=8, proxy=''):
 
         req    = urllib.request
         opener = None
 
-        if not proxy:
+        if proxy:
             proxy_opener = req.ProxyHandler({'http': proxy})
             opener = req.build_opener(proxy_opener)
 
         resp = None
-        open_fuc = req.urlopen if opener == None else opener.open
+        opener_func = req.urlopen if opener == None else opener.open
 
         try:
             if method == 'GET':
@@ -440,14 +374,18 @@ class TranslatorThread(threading.Thread):
                 # Raise the original error
                 print(e)
                 raise
+        except socket.timeout:
+            return NETWORK_TIMEOUT, ''
 
         encoding = resp.info().get_content_charset('utf-8')
+        content  = resp.read()
         resp.close()
 
-        return OK, resp.read().decode(encoding)
+        return OK, content.decode(encoding)
 
+    @staticmethod
     def get_json(url, args, method='GET', timeout=10, proxy=''):
-        error_code, result = self.get_http_response(url, args, method, timeout, proxy)
+        error_code, result = TranslatorThread.get_http_response(url, args, method, timeout, proxy)
         json_result = {}
         try:
             json_result = json.loads(result)
@@ -455,7 +393,7 @@ class TranslatorThread(threading.Thread):
             print('JSON parse error: %s' % result)
         return error_code, json_result
 
-    def get_translations():
+    def get_translations(self):
         return self.status, self.translations
 
 class YoudaoTranslatorThread(TranslatorThread):
@@ -473,7 +411,7 @@ class YoudaoTranslatorThread(TranslatorThread):
     }
 
     def __init__(self, query, full_inspiration=True, proxy=''):
-        TranslatorThread.__init__(self)
+        TranslatorThread.__init__(self, query, full_inspiration, proxy)
 
     def translate(self):
 
@@ -482,19 +420,18 @@ class YoudaoTranslatorThread(TranslatorThread):
         result = {}
         candidates = []
 
-        error_code, result = self.get_json(self.URL, self.ARGS, proxy=self.proxy)
+        error_code, result = TranslatorThread.get_json(self.URL, self.ARGS, proxy=self.proxy)
         if error_code != OK:
             return (error_code, candidates)
 
-        if 'errorCode' in result:
-            if result['errorCode'] != 0:
-                return (result['errorCode'], candidates)
+        if 'errorCode' in result and result['errorCode'] != 0:
+            return (result['errorCode'], candidates)
         if 'translation' in result:
             for trans in result['translation']:
                 candidates.append(trans)
         if 'web' in result:
             for web in result['web']:
-                strictly_matched = query == web['key']
+                strictly_matched = self.query == web['key']
                 if self.full_inspiration or strictly_matched:
                     for trans in web['value']:
                         candidates.append(trans)
@@ -516,7 +453,7 @@ class BaiduTranslatorThread(TranslatorThread):
     }
 
     def __init__(self, query, full_inspiration=True, proxy=''):
-        TranslatorThread.__init__(self)
+        TranslatorThread.__init__(self, query, full_inspiration, proxy)
 
     def translate(self):
 
@@ -529,7 +466,7 @@ class BaiduTranslatorThread(TranslatorThread):
         result = {}
         candidates = []
 
-        error_code, result = get_json(self.URL, self.ARGS, proxy=self.proxy)
+        error_code, result = TranslatorThread.get_json(self.URL, self.ARGS, proxy=self.proxy)
         if error_code != OK:
             return (error_code, candidates)
 
@@ -552,28 +489,6 @@ class BaiduTranslatorThread(TranslatorThread):
         sign = md5.hexdigest()
         return sign
 
-MT_TOKEN_LAST_ACCQUIRED = 0
-MT_TOKEN_EXPIRES_IN = 0
-MT_TOKEN_CACHE = ''
-
-def accquire_latest_microsoft_translator_access_token():
-
-    if not is_microsoft_translator_access_token_expired():
-        return
-
-    oauth_token = ''
-
-    if not oauth_token:
-        return
-
-    MT_TOKEN_CACHE          = 'Bearer %s' % oauth_token['access_token'] if 'access_token' in oauth_token else ''
-    MT_TOKEN_EXPIRES_IN     = int(oauth_token['expires_in']) if 'expires_in' in oauth_token else 0
-    MT_TOKEN_LAST_ACCQUIRED = int(time.time()) if self.token != '' else 0
-
-def is_microsoft_translator_access_token_expired():
-    return MT_TOKEN_CACHE == '' \
-        or MT_TOKEN_LAST_ACCQUIRED + MT_TOKEN_EXPIRES_IN * 0.75 < int(time.time())
-
 class MicrosoftTranslatorThread(TranslatorThread):
 
     CLIENT_ID     = 'inspr'
@@ -589,33 +504,38 @@ class MicrosoftTranslatorThread(TranslatorThread):
         'grant_type':    GRANT_TYPE
     }
 
+    ACCESS_TOKEN_LAST_ACCQUIRED = 0
+    ACCESS_TOKEN_EXPIRES_IN     = 0
+    ACCESS_TOKEN_CACHE          = ''
+
     def __init__(self, query, full_inspiration=True, proxy=''):
-        TranslatorThread.__init__(self)
+        TranslatorThread.__init__(self, query, full_inspiration, proxy)
 
     def translate(self):
 
         candidates = []
 
-        error_code = self.get_latest_token()
+        error_code = MicrosoftTranslatorThread.get_latest_token()
         if error_code != OK:
             return (error_code, candidates)
 
         # https://github.com/MicrosoftTranslator/PythonConsole/blob/master/MTPythonSampleCode/MTPythonSampleCode.py
-        if self.token == None or self.token == '':
+        if MicrosoftTranslatorThread.is_access_token_none():
             return (999, candidates)
 
         from_lang   = 'zh-CHS'
         to_lang     = 'en'
+        token       = MicrosoftTranslatorThread.ACCESS_TOKEN_CACHE
 
         # Call Microsoft Translator service
         headers = {
-            'appId': self.token,
-            'text': query,
+            'appId': token,
+            'text': self.query,
             'to': to_lang
         }
 
         # <string xmlns="http://schemas.microsoft.com/2003/10/Serialization/">%s</string>
-        error_code, translation = get_response(self.URL, headers, 'GET')
+        error_code, translation = TranslatorThread.get_http_response(self.URL, headers, 'GET')
         if error_code != OK:
             return (error_code, candidates)
 
@@ -623,29 +543,35 @@ class MicrosoftTranslatorThread(TranslatorThread):
 
         return (OK, candidates)
 
-    def get_latest_token(self):
+    @staticmethod
+    def get_latest_token():
 
-        if not self.is_access_token_expired():
+        token_expired = MicrosoftTranslatorThread.is_access_token_expired()
+        if not token_expired:
             return OK
 
-        error_code, oauth_token = get_json(self.OAUTH_URL, self.ARGS, 'POST')
+        url  = MicrosoftTranslatorThread.OAUTH_URL
+        args = MicrosoftTranslatorThread.ARGS
+
+        error_code, oauth_token = TranslatorThread.get_json(url, args, 'POST')
         if error_code != OK:
             return error_code
 
-        self.token              = 'Bearer %s' % oauth_token['access_token'] if 'access_token' in oauth_token else ''
-        self.token_expires_in   = int(oauth_token['expires_in']) if 'expires_in' in oauth_token else 0
-        self.token_last_aquired = int(time.time()) if self.token != '' else 0
+        MicrosoftTranslatorThread.ACCESS_TOKEN_CACHE          = 'Bearer %s' % oauth_token['access_token'] if 'access_token' in oauth_token else ''
+        MicrosoftTranslatorThread.ACCESS_TOKEN_EXPIRES_IN     = int(oauth_token['expires_in']) if 'expires_in' in oauth_token else 0
+        MicrosoftTranslatorThread.ACCESS_TOKEN_LAST_ACCQUIRED = int(time.time()) if MicrosoftTranslatorThread.ACCESS_TOKEN_CACHE != '' else 0
 
         return OK
 
-# Youdao source
-youdao_client = YoudaoTranslator()
+    @staticmethod
+    def is_access_token_expired():
+        return MicrosoftTranslatorThread.ACCESS_TOKEN_CACHE == '' \
+            or MicrosoftTranslatorThread.ACCESS_TOKEN_LAST_ACCQUIRED + MicrosoftTranslatorThread.ACCESS_TOKEN_EXPIRES_IN * 0.75 < int(time.time())
 
-# Baidu source
-baidu_client  = BaiduTranslator()
-
-# Microsoft source
-microsoft_client = MicrosoftTranslator()
+    @staticmethod
+    def is_access_token_none():
+        token = MicrosoftTranslatorThread.ACCESS_TOKEN_CACHE
+        return token == None or token == ''
 
 # Style fuction map
 style_functions = {
@@ -655,9 +581,4 @@ style_functions = {
     UPPER_UNDERSCORES: to_upper_underscores
 }
 
-# Translator client map
-translator_map = {
-    'Youdao': youdao_client,
-    'Baidu':  baidu_client,
-    'Microsoft': microsoft_client
-}
+sublime.set_timeout_async(MicrosoftTranslatorThread.get_latest_token, 10)
