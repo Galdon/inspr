@@ -19,4 +19,14 @@
         "command": "inspr",
         "args": { "case_style": "upper_underscores" }
     },
+    {
+        "keys": ["tab"],
+        "command": "inspr_polling_highlighted",
+        "context":
+        [
+            { "key": "overlay_visible", "operator": "equal", "operand": true },
+            { "key": "setting.is_widget", "operator": "equal", "operand": true },
+            { "key": "panel_has_focus", "operator": "equal", "operand": false }
+        ]
+    },
 ]

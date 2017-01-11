@@ -71,7 +71,7 @@ DEFAULT_CLEAR_SELECTION             = True
 DEFAULT_AUTO_DETECT_WORDS           = True
 DEFAULT_IGNORE_WORDS                = ["A", "a", "the", "The"]
 DEFAULT_FULL_INSPIRATION            = False
-DEFAULT_SHOW_WITH_MONOSPACE_FONT    = True
+DEFAULT_SHOW_WITH_MONOSPACE_FONT    = False
 DEFAULT_HTTP_PROXY                  = ''
 DEFAULT_YOUDAO_KEY                  = '672847864'
 DEFAULT_YOUDAO_KEY_FROM             = 'InsprMe'
@@ -127,16 +127,13 @@ class InsprPollingHighlightedCommand(sublime_plugin.WindowCommand):
 
     last_highlighted = -1
 
-    def run(self, forward=True):
-        if forward:
-            self.window.run_command("move", {"by": "lines", "forward": True})
-            print(self.last_highlighted)
-            print(LAST_HIGHLIGHTED)
-            if LAST_HIGHLIGHTED == self.last_highlighted:
-                step = MAX_SIZE_OF_TRANS if MAX_SIZE_OF_TRANS < 32 else 32
-                for i in range(step):
-                    self.window.run_command("move", {"by": "lines", "forward": False})
-            self.last_highlighted = LAST_HIGHLIGHTED
+    def run(self):
+        self.window.run_command("move", {"by": "lines", "forward": True})
+        if LAST_HIGHLIGHTED == self.last_highlighted:
+            step = MAX_SIZE_OF_TRANS if MAX_SIZE_OF_TRANS < 32 else 32
+            for i in range(step):
+                self.window.run_command("move", {"by": "lines", "forward": False})
+        self.last_highlighted = LAST_HIGHLIGHTED
 
 class InsprCommand(sublime_plugin.TextCommand):
 
@@ -207,7 +204,7 @@ class InsprCommand(sublime_plugin.TextCommand):
             return re.match('[0-9a-zA-Z_]+', string) != None
 
         for idx, val in enumerate(translations):
-            translations[idx] = re.sub('[-.:\'!?/,]', '', val)
+            translations[idx] = re.sub('[-.:\'!?/,;]', '', val)
         self.translations = translations = sorted(filter(isidentifier, set(translations)))
 
         if translations and cause == OK:
@@ -223,10 +220,10 @@ class InsprCommand(sublime_plugin.TextCommand):
         window = self.view.window()
         global MAX_SIZE_OF_TRANS
         MAX_SIZE_OF_TRANS = len(translations)
+        flag = 0
         if get_settings(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
-            window.show_quick_panel(translations, self.on_done, sublime.MONOSPACE_FONT, 0, self.on_hightlighted)
-        else:
-            window.show_quick_panel(translations, self.on_done)
+            flag = sublime.MONOSPACE_FONT
+        window.show_quick_panel(translations, self.on_done, flag, 0, self.on_hightlighted)
 
     def start_translate_and_join(self, dic_source, word):
         full_inspiration = get_settings(FULL_INSPIRATION, DEFAULT_FULL_INSPIRATION)
@@ -275,32 +272,33 @@ class InsprCommand(sublime_plugin.TextCommand):
         if picked == -1:
             return
 
-        trans = self.translations[picked]
-        args = { 'text': trans }
+        clear_sel = get_settings(CLEAR_SELECTION, DEFAULT_CLEAR_SELECTION)
+        args = { 'text': self.translations[picked], 'clear_sel': clear_sel }
 
-        def replace_selection():
-            self.view.run_command("inspr_replace_selection", args)
-
-        sublime.set_timeout(replace_selection, 10)
+        self.view.run_command('inspr_replace_selection', args)
 
     def on_hightlighted(self, hightlighed):
+
         global LAST_HIGHLIGHTED
         LAST_HIGHLIGHTED = hightlighed
 
+        args = { 'text': self.translations[hightlighed], 'clear_sel': False }
+        self.view.run_command('inspr_replace_selection', args)
+
 class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
-    def run(self, edit, **replacement):
+    def run(self, edit, **args):
 
-        if 'text' not in replacement:
+        if 'text' not in args:
             return
 
         view = self.view
         selection = view.sel()
-        translation = replacement['text']
+        translation = args['text']
 
         view.replace(edit, selection[0], translation)
 
-        clear_sel = get_settings(CLEAR_SELECTION, DEFAULT_CLEAR_SELECTION)
+        clear_sel = args['clear_sel']
         if not clear_sel:
             return
 

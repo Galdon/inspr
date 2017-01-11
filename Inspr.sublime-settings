@@ -15,7 +15,7 @@
 	"full_inspiration": true,
 
 	// Show monospace font in result
-	"show_with_monospace_font": true,
+	"show_with_monospace_font": false,
 
 	// Support HTTP proxy only
 	"http_proxy": "",
