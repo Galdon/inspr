@@ -51,22 +51,34 @@ LOWER_UNDERSCORES = 'lower_underscores'
 UPPER_UNDERSCORES = 'upper_underscores'
 
 # Settings
-DICTIONARY_SOURCE        = 'dictionary_source'
-CLEAR_SELECTION          = 'clear_selection'
-AUTO_DETECT_WORDS        = 'auto_detect_words'
-IGNORE_WORDS             = 'ignore_words'
-FULL_INSPIRATION         = 'full_inspiration'
-SHOW_WITH_MONOSPACE_FONT = 'show_with_monospace_font'
-HTTP_PROXY               = 'http_proxy'
+DICTIONARY_SOURCE           = 'dictionary_source'
+CLEAR_SELECTION             = 'clear_selection'
+AUTO_DETECT_WORDS           = 'auto_detect_words'
+IGNORE_WORDS                = 'ignore_words'
+FULL_INSPIRATION            = 'full_inspiration'
+SHOW_WITH_MONOSPACE_FONT    = 'show_with_monospace_font'
+HTTP_PROXY                  = 'http_proxy'
+YOUDAO_KEY                  = 'youdao_key'
+YOUDAO_KEY_FROM             = 'youdao_key_from'
+BAIDU_APPID                 = 'baidu_appid'
+BAIDU_SECRET_KEY            = 'baidu_secret_key'
+MICROSOFT_CLIENT_ID         = 'microsoft_client_id'
+MICROSOFT_CLIENT_SECRET_KEY = 'microsot_client_secret_key'
 
 # Default Settings Value
-DEFAULT_DIC_SROUCE               = ['Baidu']
-DEFAULT_CLEAR_SELECTION          = True
-DEFAULT_AUTO_DETECT_WORDS        = True
-DEFAULT_IGNORE_WORDS             = ["A", "a", "the", "The"]
-DEFAULT_FULL_INSPIRATION         = False
-DEFAULT_SHOW_WITH_MONOSPACE_FONT = True
-DEFAULT_HTTP_PROXY               = ''
+DEFAULT_DIC_SROUCE                  = ['Baidu']
+DEFAULT_CLEAR_SELECTION             = True
+DEFAULT_AUTO_DETECT_WORDS           = True
+DEFAULT_IGNORE_WORDS                = ["A", "a", "the", "The"]
+DEFAULT_FULL_INSPIRATION            = False
+DEFAULT_SHOW_WITH_MONOSPACE_FONT    = True
+DEFAULT_HTTP_PROXY                  = ''
+DEFAULT_YOUDAO_KEY                  = '672847864'
+DEFAULT_YOUDAO_KEY_FROM             = 'InsprMe'
+DEFAULT_BAIDU_APPID                 = '20161205000033482'
+DEFAULT_BAIDU_SECRET_KEY            = 'bFPDI4jI5jI61S7VpyLR'
+DEFAULT_MICROSOFT_CLIENT_ID         = 'inspr'
+DEFAULT_MICROSOFT_CLIENT_SECRET_KEY = 'awhg2KcdFKnwhylSNYeZIrKGhdIGv2g63YrSjOSo'
 
 DICTIONARY_CACHE = {}
 clear_global_cache = DICTIONARY_CACHE.clear
@@ -119,13 +131,6 @@ class InsprCommand(sublime_plugin.TextCommand):
         sublime.set_timeout_async(self.query, 0)
 
     def query(self):
-
-        # self.edit         = edit
-        # self.view         = view
-        # self.window       = view.window()
-        # self.translations = []
-        # self.args         = args
-        # threading.Thread.__init__(self)
 
         translations = self.translations
         window = self.view.window()
@@ -209,8 +214,16 @@ class InsprCommand(sublime_plugin.TextCommand):
         for dic in dic_source:
             create_thread = None
             if dic == 'Youdao':
+                key = get_settings(YOUDAO_KEY, DEFAULT_YOUDAO_KEY)
+                key_from = get_settings(YOUDAO_KEY_FROM, DEFAULT_YOUDAO_KEY_FROM)
+                YoudaoTranslatorThread.KEY = key if key else DEFAULT_YOUDAO_KEY
+                YoudaoTranslatorThread.KEY_FROM = key_from if key_from else DEFAULT_YOUDAO_KEY_FROM
                 create_thread = YoudaoTranslatorThread
             elif dic == 'Baidu':
+                app_id = get_settings(BAIDU_APPID, DEFAULT_BAIDU_APPID)
+                secret_key = get_settings(BAIDU_SECRET_KEY, DEFAULT_BAIDU_SECRET_KEY)
+                BaiduTranslatorThread.APP_ID = app_id if app_id else DEFAULT_BAIDU_APPID
+                BaiduTranslatorThread.SECRET_KEY = secret_key if secret_key else DEFAULT_BAIDU_SECRET_KEY
                 create_thread = BaiduTranslatorThread
             elif dic == 'Microsoft':
                 create_thread = MicrosoftTranslatorThread
@@ -300,11 +313,11 @@ class InsprAutoDetectWordsCommand(sublime_plugin.TextCommand):
         offset = 0
 
         if clsfy & sublime.CLASS_WORD_START != 0:
-            # go right until word end or line end
+            # Go right until word end or line end
             flag = (sublime.CLASS_WORD_END | sublime.CLASS_SUB_WORD_END | sublime.CLASS_LINE_END)
             offset = 1
         elif clsfy & sublime.CLASS_WORD_END != 0:
-            # go left until word start or line start
+            # Go left until word start or line start
             flag = (sublime.CLASS_WORD_START | sublime.CLASS_SUB_WORD_START | sublime.CLASS_LINE_START)
             offset = -1
         else:
@@ -316,6 +329,7 @@ class InsprAutoDetectWordsCommand(sublime_plugin.TextCommand):
 
         sentinel = 0
         while _clsfy & flag == 0:
+            # In case of infinity loop
             if sentinel > 32:
                 return
             _pt = self.move_cursor_horizontally(_pt, offset)
@@ -398,8 +412,8 @@ class TranslatorThread(threading.Thread):
 
 class YoudaoTranslatorThread(TranslatorThread):
 
-    KEY      = '672847864'
-    KEY_FROM = 'InsprMe'
+    KEY      = ''
+    KEY_FROM = ''
     URL      = 'http://fanyi.youdao.com/openapi.do?'
     ARGS     = {
         'key':     KEY,
@@ -415,12 +429,20 @@ class YoudaoTranslatorThread(TranslatorThread):
 
     def translate(self):
 
-        self.ARGS['q'] = self.query.encode('utf-8')
+        args     = {
+            'key':     YoudaoTranslatorThread.KEY,
+            'keyfrom': YoudaoTranslatorThread.KEY_FROM,
+            'type':    'data',
+            'doctype': 'json',
+            'version': '1.1',
+            'q':       ''
+        }
+        args['q'] = self.query.encode('utf-8')
 
         result = {}
         candidates = []
 
-        error_code, result = TranslatorThread.get_json(self.URL, self.ARGS, proxy=self.proxy)
+        error_code, result = TranslatorThread.get_json(self.URL, args, proxy=self.proxy)
         if error_code != OK:
             return (error_code, candidates)
 
@@ -440,17 +462,9 @@ class YoudaoTranslatorThread(TranslatorThread):
 
 class BaiduTranslatorThread(TranslatorThread):
 
-    APP_ID     = '20161205000033482'
-    SECRET_KEY = 'bFPDI4jI5jI61S7VpyLR'
+    APP_ID     = ''
+    SECRET_KEY = ''
     URL        = 'http://api.fanyi.baidu.com/api/trans/vip/translate?'
-    ARGS       = {
-        'appid': APP_ID,
-        'from':  'zh',
-        'to':    'en',
-        'salt':  '',
-        'sign':  '',
-        'q':     ''
-    }
 
     def __init__(self, query, full_inspiration=True, proxy=''):
         TranslatorThread.__init__(self, query, full_inspiration, proxy)
@@ -458,15 +472,23 @@ class BaiduTranslatorThread(TranslatorThread):
     def translate(self):
 
         salt = self.rand()
+        args = {
+            'appid': BaiduTranslatorThread.APP_ID,
+            'from':  'zh',
+            'to':    'en',
+            'salt':  '',
+            'sign':  '',
+            'q':     ''
+        }
 
-        self.ARGS['salt'] = salt
-        self.ARGS['sign'] = self.get_sign(salt)
-        self.ARGS['q']    = self.query
+        args['salt'] = salt
+        args['sign'] = self.get_sign(salt)
+        args['q']    = self.query
 
         result = {}
         candidates = []
 
-        error_code, result = TranslatorThread.get_json(self.URL, self.ARGS, proxy=self.proxy)
+        error_code, result = TranslatorThread.get_json(self.URL, args, proxy=self.proxy)
         if error_code != OK:
             return (error_code, candidates)
 
@@ -491,18 +513,12 @@ class BaiduTranslatorThread(TranslatorThread):
 
 class MicrosoftTranslatorThread(TranslatorThread):
 
-    CLIENT_ID     = 'inspr'
-    CLIENT_SECRET = 'awhg2KcdFKnwhylSNYeZIrKGhdIGv2g63YrSjOSo'
+    CLIENT_ID     = ''
+    CLIENT_SECRET = ''
     SCOPE         = 'http://api.microsofttranslator.com'
     GRANT_TYPE    = 'client_credentials'
     OAUTH_URL     = 'https://datamarket.accesscontrol.windows.net/v2/OAuth2-13'
     URL           = 'http://api.microsofttranslator.com/v2/Http.svc/Translate?'
-    ARGS = {
-        'client_id':     CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'scope':         SCOPE,
-        'grant_type':    GRANT_TYPE
-    }
 
     ACCESS_TOKEN_LAST_ACCQUIRED = 0
     ACCESS_TOKEN_EXPIRES_IN     = 0
@@ -551,7 +567,12 @@ class MicrosoftTranslatorThread(TranslatorThread):
             return OK
 
         url  = MicrosoftTranslatorThread.OAUTH_URL
-        args = MicrosoftTranslatorThread.ARGS
+        args = {
+            'client_id':     MicrosoftTranslatorThread.CLIENT_ID,
+            'client_secret': MicrosoftTranslatorThread.CLIENT_SECRET,
+            'scope':         MicrosoftTranslatorThread.SCOPE,
+            'grant_type':    MicrosoftTranslatorThread.GRANT_TYPE
+        }
 
         error_code, oauth_token = TranslatorThread.get_json(url, args, 'POST')
         if error_code != OK:
@@ -581,4 +602,11 @@ style_functions = {
     UPPER_UNDERSCORES: to_upper_underscores
 }
 
+def load_microsoft_client_id():
+    client_id = get_settings(MICROSOFT_CLIENT_ID, DEFAULT_MICROSOFT_CLIENT_ID)
+    client_secret = get_settings(MICROSOFT_CLIENT_SECRET_KEY, DEFAULT_MICROSOFT_CLIENT_SECRET_KEY)
+    MicrosoftTranslatorThread.CLIENT_ID = client_id if client_id else DEFAULT_MICROSOFT_CLIENT_ID
+    MicrosoftTranslatorThread.CLIENT_SECRET = client_secret if client_secret else DEFAULT_MICROSOFT_CLIENT_SECRET_KEY
+
+load_microsoft_client_id()
 sublime.set_timeout_async(MicrosoftTranslatorThread.get_latest_token, 10)

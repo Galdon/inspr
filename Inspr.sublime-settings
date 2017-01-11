@@ -18,5 +18,14 @@
 	"show_with_monospace_font": true,
 
 	// Support HTTP proxy only
-	"http_proxy": ""
+	"http_proxy": "",
+
+	"youdao_key": "",
+	"youdao_key_from": "",
+
+	"baidu_appid": "",
+	"baidu_secret_key": "",
+
+	"microsoft_client_id": "",
+	"microsoft_client_secret_key": ""
 }
