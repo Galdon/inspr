@@ -7,14 +7,14 @@
 			"description": "Naming solution for Chinese programmers.",
 			"author": "zhix",
 			"homepage": "https://github.com/wzhix/inspr",
-			"last_modified": "2017-01-11 03:37:00",
+			"last_modified": "2017-01-12 10:58:00",
 			"readme": "https://github.com/wzhix/inspr/README.md",
 			"labels": ["naming tranlate chinese"],
 			"platforms": {
 				"*": [
 					{
-						"version": "0.2.0",
-						"url": "https://github.com/wzhix/inspr/releases/download/v0.2.0/inspr.sublime-package"
+						"version": "0.2.1",
+						"url": "https://github.com/wzhix/inspr/releases/download/v0.2.1/inspr.sublime-package"
 					}
 				]
 			}
