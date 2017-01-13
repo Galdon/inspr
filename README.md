@@ -1,51 +1,74 @@
 # Inspr
-Inspr 是一个程序员命名解决方案，以插件的形式集成在主流编辑器中，专治各种命名头疼患者。
 
-## 食用方式
+A tranlation plugin for Sublime Text 3 that helps Chinese programmers to name variables and traslate Chinese words to English with specific variable format.
 
-输入中文，按下 Inspr 翻译快捷键，列出可选的命名方案。
+# Installation
 
-例如 `let 军团（Ctrl + Command + i）`，弹出上下文联想菜单
+[Latest Release](https://github.com/wzhix/inspr/releases/latest)
 
-```
-corp, Corp, faction, Faction ....
-```
+# Usage
 
-## 插件效果
+Input the variable name you want to translate in Chinese and press shortcut keys, the plugin will translate them to English with specific format.
+
+There are 4 types of variable format available --- `lowerCamelCase`, `UpperCamelCase`, `lower_underscores` and `UPPER_UNDERSCORES`, each of them has its corresponding  key-mapping.
+
+For example, `let 普通变量 (Ctrl + Command + i)`, a quick panel will popup up and show the variable-formated results as `commonVariable`, `commonVariables`, `geheric` and `ordinaryVariable`.
+
+# Demonstration
 
 ![插件效果](inspr-demo.gif)
 
-## 开发顺序
-
-Sublime Text -> Atom -> VSCode -> JetBrain -> Eclipse -> Mac App
-
-# 偏好设置
+# Settings
 
 ### 词典源（Dictionary Source）
-Inspr 默认提供两个词典源，有道词典翻译和百度词典翻译，在偏好设置 `dictionary_source` 里指定可选的词典源，默认值是 `["Youdao", "Baidu"]`。
 
+Inspr provides 3 dictionaries by default --- 有道翻译(Youdao), 百度翻译(Baidu) and 微软翻译(Microsoft). Valid options are "Youdao", "Baidu", "Microsoft", `["Youdao", "Baidu"]` is recommended.
 ```
 "dictionary_source": ["Youdao", "Baidu"]
 ```
 
 ### 清除选中（Clear Selection）
-该设置表示用翻译结果替换选中区域的文字时，同时清除选中区域，默认值是 `true`。
+
+If true, the selection in current editor will clear after the item in quick panel is selected. `true` is recommended.
+```
+"clear_selection": true
+```
 
 ### 自动检测单词（Auto Detect Words）
-如果开启，则在 Sublime 的任何编辑区域按下快捷键时，会自动向左向右寻找单词文本，默认值是 `false`。
+
+If true, Inspr will search word toward left and right. `["A", "a", "the", "The"]` is recommended.
+```
+"auto_detect_words": true
+```
 
 ### 忽略单词（Ignore Words）
-该设置里填写的单词将会在翻译中去除。默认值是 `["A", "a", "the", "The"]`。
+
+Words in this list will be skiped when processing. `true` is recommended.
+```
+"ignore_words": ["A", "a", "the", "The"]
+```
 
 ### 完整提示（Full Inspiration)
-如果启用，则在翻译结果中加入网络翻译和联想翻译，翻译精准度会降低，但将会提供更多可选项，默认值是 `true`。
+
+If true, web translations will be added in results. Inspr will provide less accurated results but it will be more candidate translations in results. `true` is recommended.
+```
+"full_inspiration": true
+```
 
 ### 结果显示为等宽字体（Show with Monospace Font）
-如果启用，则结果列表的字体将显示为系统默认的等宽字体（monospace），默认值是 `true`。
+
+If true, results in quick panel will be rendered with monospace font. `false` is recommended.
+```
+"show_with_monospace_font": false
+```
 
 ### HTTP 代理（HTTP Proxy）
-如果启用，则将通过代理服务器连接翻译 API 服务器，暂只支持 HTTP 代理，不支持 SOCKS 代理，默认值是空。
 
+Connect translation API server with http proxy.
+如果启用，则将通过代理服务器连接翻译 API 服务器，暂只支持 HTTP 代理，不支持 SOCKS 代理，默认值是空。
+```
+"http_proxy": ""
+```
 # License
 
 ```
