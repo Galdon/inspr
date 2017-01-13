@@ -65,7 +65,6 @@ If true, results in quick panel will be rendered with monospace font. `false` is
 ### HTTP 代理（HTTP Proxy）
 
 Connect translation API server with http proxy.
-如果启用，则将通过代理服务器连接翻译 API 服务器，暂只支持 HTTP 代理，不支持 SOCKS 代理，默认值是空。
 ```
 "http_proxy": ""
 ```
