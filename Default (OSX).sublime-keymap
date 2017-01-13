@@ -28,5 +28,5 @@
             { "key": "setting.is_widget", "operator": "equal", "operand": true },
             { "key": "panel_has_focus", "operator": "equal", "operand": false }
         ]
-    },
+    }
 ]

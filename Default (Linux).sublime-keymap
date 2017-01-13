@@ -18,5 +18,5 @@
         "keys": ["ctrl+shift+alt+u"],
         "command": "inspr",
         "args": { "case_style": "upper_underscores" }
-    },
+    }
 ]
