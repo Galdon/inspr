@@ -36,14 +36,14 @@ If true, the selection in current editor will clear after the item in quick pane
 
 ### 自动检测单词（Auto Detect Words）
 
-If true, Inspr will search word toward left and right. `["A", "a", "the", "The"]` is recommended.
+If true, Inspr will search word toward left and right. `true` is recommended.
 ```
 "auto_detect_words": true
 ```
 
 ### 忽略单词（Ignore Words）
 
-Words in this list will be skiped when processing. `true` is recommended.
+Words in this list will be skiped when processing. `["A", "a", "the", "The"]` is recommended.
 ```
 "ignore_words": ["A", "a", "the", "The"]
 ```
