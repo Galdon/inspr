@@ -120,6 +120,18 @@ def get_corresponding_style_function(case_style):
     mapper = style_functions
     return mapper[case_style] if case_style in mapper else to_lower_camel_case
 
+MAX_SIZE_OF_TRANS = 0
+
+class InsprPollingHighlightedCommand(sublime_plugin.WindowCommand):
+    """Simulate page-down by repeating down command multiple times"""
+    def run(self, forward=True):
+        if forward:
+            self.window.run_command("move", {"by": "lines", "forward": True})
+        else:
+            step = MAX_SIZE_OF_TRANS if MAX_SIZE_OF_TRANS < 32 else 32
+            for i in range(step):
+                self.window.run_command("move", {"by": "lines", "forward": False})
+
 class InsprCommand(sublime_plugin.TextCommand):
 
     translations = []
@@ -203,6 +215,8 @@ class InsprCommand(sublime_plugin.TextCommand):
 
     def show_translations(self, translations):
         window = self.view.window()
+        global MAX_SIZE_OF_TRANS
+        MAX_SIZE_OF_TRANS = len(translations)
         if get_settings(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
             window.show_quick_panel(translations, self.on_done, sublime.MONOSPACE_FONT)
         else:
