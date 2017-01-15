@@ -121,16 +121,22 @@ def get_corresponding_style_function(case_style):
     return mapper[case_style] if case_style in mapper else to_lower_camel_case
 
 MAX_SIZE_OF_TRANS = 0
+LAST_HIGHLIGHTED  = 0
 
 class InsprPollingHighlightedCommand(sublime_plugin.WindowCommand):
-    """Simulate page-down by repeating down command multiple times"""
+
+    last_highlighted = -1
+
     def run(self, forward=True):
         if forward:
             self.window.run_command("move", {"by": "lines", "forward": True})
-        else:
-            step = MAX_SIZE_OF_TRANS if MAX_SIZE_OF_TRANS < 32 else 32
-            for i in range(step):
-                self.window.run_command("move", {"by": "lines", "forward": False})
+            print(self.last_highlighted)
+            print(LAST_HIGHLIGHTED)
+            if LAST_HIGHLIGHTED == self.last_highlighted:
+                step = MAX_SIZE_OF_TRANS if MAX_SIZE_OF_TRANS < 32 else 32
+                for i in range(step):
+                    self.window.run_command("move", {"by": "lines", "forward": False})
+            self.last_highlighted = LAST_HIGHLIGHTED
 
 class InsprCommand(sublime_plugin.TextCommand):
 
@@ -218,7 +224,7 @@ class InsprCommand(sublime_plugin.TextCommand):
         global MAX_SIZE_OF_TRANS
         MAX_SIZE_OF_TRANS = len(translations)
         if get_settings(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
-            window.show_quick_panel(translations, self.on_done, sublime.MONOSPACE_FONT)
+            window.show_quick_panel(translations, self.on_done, sublime.MONOSPACE_FONT, 0, self.on_hightlighted)
         else:
             window.show_quick_panel(translations, self.on_done)
 
@@ -276,6 +282,10 @@ class InsprCommand(sublime_plugin.TextCommand):
             self.view.run_command("inspr_replace_selection", args)
 
         sublime.set_timeout(replace_selection, 10)
+
+    def on_hightlighted(self, hightlighed):
+        global LAST_HIGHLIGHTED
+        LAST_HIGHLIGHTED = hightlighed
 
 class InsprReplaceSelectionCommand(sublime_plugin.TextCommand):
 
