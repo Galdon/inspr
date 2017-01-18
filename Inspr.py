@@ -128,12 +128,22 @@ class InsprPollingHighlightedCommand(sublime_plugin.WindowCommand):
     last_highlighted = -1
 
     def run(self):
+
         self.window.run_command("move", {"by": "lines", "forward": True})
         if LAST_HIGHLIGHTED == self.last_highlighted:
             step = MAX_SIZE_OF_TRANS if MAX_SIZE_OF_TRANS < 32 else 32
             for i in range(step):
                 self.window.run_command("move", {"by": "lines", "forward": False})
         self.last_highlighted = LAST_HIGHLIGHTED
+
+class InsprPollingHighlightedContextHandler(sublime_plugin.EventListener):
+
+    def on_query_context(self, view, key, operator, operand, match_all):
+        
+        if key != 'inspr_result_overlay_visible':
+            return None
+
+        return True
 
 class InsprCommand(sublime_plugin.TextCommand):
 
