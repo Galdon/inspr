@@ -123,6 +123,8 @@ def get_corresponding_style_function(case_style):
 MAX_SIZE_OF_TRANS = 0
 LAST_HIGHLIGHTED  = 0
 
+RESULT_QUICK_PANEL_OPEN = False
+
 class InsprPollingHighlightedCommand(sublime_plugin.WindowCommand):
 
     last_highlighted = -1
@@ -143,7 +145,7 @@ class InsprPollingHighlightedContextHandler(sublime_plugin.EventListener):
         if key != 'inspr_result_overlay_visible':
             return None
 
-        return True
+        return RESULT_QUICK_PANEL_OPEN
 
 class InsprCommand(sublime_plugin.TextCommand):
 
@@ -233,6 +235,10 @@ class InsprCommand(sublime_plugin.TextCommand):
         flag = 0
         if get_settings(SHOW_WITH_MONOSPACE_FONT, DEFAULT_SHOW_WITH_MONOSPACE_FONT):
             flag = sublime.MONOSPACE_FONT
+
+        global RESULT_QUICK_PANEL_OPEN
+        RESULT_QUICK_PANEL_OPEN = True
+
         window.show_quick_panel(translations, self.on_done, flag, 0, self.on_hightlighted)
 
     def start_translate_and_join(self, dic_source, word):
@@ -286,6 +292,9 @@ class InsprCommand(sublime_plugin.TextCommand):
         args = { 'text': self.translations[picked], 'clear_sel': clear_sel }
 
         self.view.run_command('inspr_replace_selection', args)
+
+        global RESULT_QUICK_PANEL_OPEN
+        RESULT_QUICK_PANEL_OPEN = False
 
     def on_hightlighted(self, hightlighed):
 
@@ -419,8 +428,7 @@ class TranslatorThread(threading.Thread):
                 return NETWORK_TIMEOUT, ''
             else:
                 # Raise the original error
-                print(e)
-                raise
+                return NETWORK_TIMEOUT, ''
         except socket.timeout:
             return NETWORK_TIMEOUT, ''
 
