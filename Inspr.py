@@ -180,6 +180,7 @@ class InsprCommand(sublime_plugin.TextCommand):
         for trans in candidates:
             # split by space and skip words
             if ignore:
+                trans = re.sub('[&]', 'and', trans)
                 trans = filter_ignored(trans, ignore)
             case = style_function(trans)
             translations.append(case)
